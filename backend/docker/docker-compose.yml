@@ -1,0 +1,91 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: finviz-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: finviz_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    networks:
+      - finviz-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: finviz-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./data/redis:/data
+    networks:
+      - finviz-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: finviz-app
+    environment:
+      FLASK_ENV: development
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/finviz_dev
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "5000:5000"
+    volumes:
+      - ../uploads:/app/uploads
+      - ../logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - finviz-network
+    command: >
+      sh -c "
+        flask db upgrade &&
+        gunicorn --bind 0.0.0.0:5000 --workers 4 --reload wsgi:app
+      "
+
+  test:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: finviz-test
+    environment:
+      FLASK_ENV: testing
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/finviz_test
+      REDIS_URL: redis://redis:6379/1
+    volumes:
+      - ../tests:/app/tests
+      - ../.coverage:/app/.coverage
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - finviz-network
+    command: >
+      sh -c "
+        pytest --cov=app --cov-report=term --cov-report=html
+      "
+
+networks:
+  finviz-network:
+    driver: bridge
