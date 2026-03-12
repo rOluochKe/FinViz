@@ -40,6 +40,22 @@ lint:
 	@echo "$(GREEN)Running mypy...$(RESET)"
 	mypy app/
 
+lint-fix:
+	@echo "$(GREEN)Auto-fixing linting issues...$(RESET)"
+	@command -v black >/dev/null 2>&1 || { echo "Installing black..."; pip install black; }
+	@command -v isort >/dev/null 2>&1 || { echo "Installing isort..."; pip install isort; }
+	@command -v autoflake >/dev/null 2>&1 || { echo "Installing autoflake..."; pip install autoflake; }
+	@command -v autopep8 >/dev/null 2>&1 || { echo "Installing autopep8..."; pip install autopep8; }
+	
+	black app/ tests/
+	isort app/ tests/
+	autoflake --in-place --recursive --remove-all-unused-imports --remove-unused-variables app/ tests/
+	autopep8 --in-place --recursive --aggressive app/ tests/
+	
+	@echo "$(GREEN)✅ Linting fixes applied!$(RESET)"
+	@echo "$(YELLOW)Remaining issues (if any):$(RESET)"
+	-flake8 app/ tests/ --count --statistics
+
 format:
 	@echo "$(GREEN)Running black...$(RESET)"
 	black app/ tests/
