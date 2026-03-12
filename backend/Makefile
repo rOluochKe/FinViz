@@ -1,7 +1,9 @@
-.PHONY: help install install-dev lint lint-fix format test test-cov clean \
-        docker-up docker-down docker-logs db-init db-migrate db-upgrade \
-        db-downgrade seed shell backup restore hooks-install hooks-run \
-        hooks-update hooks-uninstall
+.PHONY: help install install-dev lint lint-fix format test test-cov test-watch \
+        run run-prod run-dev \
+        docker-up docker-down docker-logs docker-build docker-shell docker-clean \
+        db-init db-migrate db-upgrade db-downgrade db-reset \
+        seed shell backup restore \
+        hooks-install hooks-run hooks-update hooks-uninstall clean
 
 # Colors for output
 GREEN := $(shell tput -Txterm setaf 2)
@@ -9,6 +11,41 @@ YELLOW := $(shell tput -Txterm setaf 3)
 RED := $(shell tput -Txterm setaf 1)
 BLUE := $(shell tput -Txterm setaf 4)
 RESET := $(shell tput -Txterm sgr0)
+
+# Application
+run:
+	@echo "$(GREEN)🚀 Starting Flask development server...$(RESET)"
+	@echo "$(GREEN)   App will be available at: http://localhost:5000$(RESET)"
+	@echo "$(GREEN)   Press Ctrl+C to stop$(RESET)"
+	@export FLASK_APP=run.py && \
+	 export FLASK_ENV=development && \
+	 export FLASK_DEBUG=1 && \
+	 flask run --host=0.0.0.0 --port=5000
+
+run-prod:
+	@echo "$(GREEN)🚀 Starting production server with Gunicorn...$(RESET)"
+	@echo "$(GREEN)   App will be available at: http://localhost:5000$(RESET)"
+	@echo "$(GREEN)   Press Ctrl+C to stop$(RESET)"
+	@mkdir -p logs
+	@gunicorn --bind 0.0.0.0:5000 \
+		--workers 4 \
+		--worker-class sync \
+		--timeout 120 \
+		--access-logfile logs/access.log \
+		--error-logfile logs/error.log \
+		--log-level info \
+		wsgi:app
+
+run-dev:
+	@echo "$(GREEN)🚀 Starting Flask development server with debug mode...$(RESET)"
+	@echo "$(GREEN)   App will be available at: http://localhost:5000$(RESET)"
+	@echo "$(GREEN)   Auto-reload enabled, debug mode on$(RESET)"
+	@echo "$(GREEN)   Press Ctrl+C to stop$(RESET)"
+	@export FLASK_APP=run.py && \
+	 export FLASK_ENV=development && \
+	 export FLASK_DEBUG=1 && \
+	 python run.py
+
 
 help:
 	@echo "$(GREEN)╔════════════════════════════════════════════════════════╗$(RESET)"
@@ -18,6 +55,11 @@ help:
 	@echo "$(BLUE)Installation & Dependencies:$(RESET)"
 	@echo "  $(YELLOW)install$(RESET)        Install production dependencies"
 	@echo "  $(YELLOW)install-dev$(RESET)    Install all dependencies (including dev)"
+	@echo ""
+	@echo "$(BLUE)Running the Application:$(RESET)"  # New section
+	@echo "  $(YELLOW)run$(RESET)             Start Flask development server"
+	@echo "  $(YELLOW)run-dev$(RESET)         Start Flask with debug mode (auto-reload)"
+	@echo "  $(YELLOW)run-prod$(RESET)         Start production server with Gunicorn"
 	@echo ""
 	@echo "$(BLUE)Code Quality:$(RESET)"
 	@echo "  $(YELLOW)lint$(RESET)           Run linters (flake8, mypy)"
@@ -35,6 +77,7 @@ help:
 	@echo "  $(YELLOW)docker-logs$(RESET)    View Docker logs"
 	@echo "  $(YELLOW)docker-build$(RESET)   Rebuild Docker images"
 	@echo "  $(YELLOW)docker-shell$(RESET)   Open shell in app container"
+	@echo "  $(YELLOW)docker-clean$(RESET)   Clean Docker resources"
 	@echo ""
 	@echo "$(BLUE)Database:$(RESET)"
 	@echo "  $(YELLOW)db-init$(RESET)        Initialize database migrations"

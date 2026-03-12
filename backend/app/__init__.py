@@ -6,18 +6,31 @@ import logging
 import os
 from datetime import datetime
 
+from dotenv import load_dotenv
 from flask import Flask, jsonify
 from flask_cors import CORS
 
-from app.extensions import api, cache, db, jwt, limiter, migrate
+# Load .env file at the VERY beginning
+load_dotenv()
+
+from flask_jwt_extended import JWTManager
+
+from app.extensions import api, cache, db, limiter, migrate
 from app.middleware.auth import setup_jwt_callbacks
 from app.middleware.error_handler import register_error_handlers
+from app.routes.admin import admin_bp
 from app.routes.analytics import analytics_bp
 from app.routes.auth import auth_bp
 from app.routes.budgets import budgets_bp
 from app.routes.categories import categories_bp
 from app.routes.dashboard import dashboard_bp
+from app.routes.exports import exports_bp
+from app.routes.health import health_bp
+from app.routes.imports import imports_bp
+from app.routes.reports import reports_bp
 from app.routes.transactions import transactions_bp
+from app.routes.users import users_bp
+from app.routes.webhooks import webhooks_bp
 from app.utils.constants import HTTP_STATUS
 from config import config
 
@@ -35,20 +48,45 @@ def create_app(config_name=None):
     if config_name is None:
         config_name = os.getenv("FLASK_ENV", "development")
 
+    print(f"🔧 Creating app with config: {config_name}")
+
     app = Flask(__name__)
     app.config.from_object(config[config_name])
 
-    # Initialize extensions
-    initialize_extensions(app)
+    print("📦 Initializing extensions...")
 
-    # Setup logging
+    # Initialize extensions
+    db.init_app(app)
+    print("  ✅ db initialized")
+
+    migrate.init_app(app, db)
+    print("  ✅ migrate initialized")
+
+    # Initialize JWT directly
+    jwt = JWTManager(app)
+    print(f"  ✅ jwt initialized directly")
+    print(f"  ✅ app.jwt exists: {hasattr(app, 'jwt')}")
+
+    cache.init_app(app)
+    print("  ✅ cache initialized")
+
+    limiter.init_app(app)
+    print("  ✅ limiter initialized")
+
+    api.init_app(app)
+    print("  ✅ api initialized")
+
+    # Store jwt in app config for later use
+    app.jwt_manager = jwt
+
+    # Setup logging - THIS FUNCTION WAS MISSING
     setup_logging(app)
+
+    # Setup JWT callbacks
+    setup_jwt_callbacks(app, jwt)
 
     # Setup error handlers
     register_error_handlers(app)
-
-    # Setup JWT callbacks
-    setup_jwt_callbacks(app)
 
     # Register blueprints
     register_blueprints(app)
@@ -67,16 +105,6 @@ def create_app(config_name=None):
     return app
 
 
-def initialize_extensions(app):
-    """Initialize Flask extensions with the app."""
-    db.init_app(app)
-    migrate.init_app(app, db)
-    jwt.init_app(app)
-    cache.init_app(app)
-    limiter.init_app(app)
-    api.init_app(app)
-
-
 def setup_logging(app):
     """Configure logging for the application."""
     log_level = getattr(logging, app.config.get("LOG_LEVEL", "INFO"))
@@ -90,6 +118,9 @@ def setup_logging(app):
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         handlers=[logging.FileHandler(log_file), logging.StreamHandler()],
     )
+
+    # Set app logger level
+    app.logger.setLevel(log_level)
 
 
 def create_upload_directories(app):
@@ -112,11 +143,18 @@ def register_blueprints(app):
 
     blueprints = [
         (auth_bp, "/api/auth"),
-        (transactions_bp, "/api/transactions"),
+        (users_bp, "/api/users"),
         (categories_bp, "/api/categories"),
-        (analytics_bp, "/api/analytics"),
+        (transactions_bp, "/api/transactions"),
         (budgets_bp, "/api/budgets"),
+        (analytics_bp, "/api/analytics"),
         (dashboard_bp, "/api/dashboard"),
+        (reports_bp, "/api/reports"),
+        (imports_bp, "/api/imports"),
+        (exports_bp, "/api/exports"),
+        (health_bp, "/api/health"),
+        (webhooks_bp, "/api/webhooks"),
+        (admin_bp, "/api/admin"),
     ]
 
     for blueprint, prefix in blueprints:
@@ -148,7 +186,7 @@ def add_health_check(app):
                         "timestamp": datetime.utcnow().isoformat(),
                     }
                 ),
-                HTTP_STATUS.OK,
+                200,
             )
 
         except Exception as e:
@@ -161,5 +199,5 @@ def add_health_check(app):
                         "timestamp": datetime.utcnow().isoformat(),
                     }
                 ),
-                HTTP_STATUS.SERVICE_UNAVAILABLE,
+                503,
             )

@@ -4,24 +4,26 @@ Authentication middleware and JWT callbacks.
 
 from functools import wraps
 
-from flask import jsonify
+from flask import current_app, jsonify
 from flask_jwt_extended import get_jwt, get_jwt_identity, verify_jwt_in_request
 
 from app.models.user import User
 from app.utils.constants import HTTP_STATUS
 
 
-def setup_jwt_callbacks(app):
+def setup_jwt_callbacks(app, jwt):  # ✅ Added jwt parameter
     """Setup JWT callback functions."""
+    print(f"🔧 Inside setup_jwt_callbacks")
+    print(f"   jwt manager provided: {jwt is not None}")
 
-    @app.jwt.user_identity_loader
+    @jwt.user_identity_loader  # ✅ Use jwt parameter instead of app.jwt
     def user_identity_lookup(user):
         """Convert user ID to JWT identity."""
         if isinstance(user, User):
             return str(user.id)
         return str(user)
 
-    @app.jwt.user_lookup_loader
+    @jwt.user_lookup_loader
     def user_lookup_callback(_jwt_header, jwt_data):
         """Load user from JWT identity."""
         identity = jwt_data["sub"]
@@ -30,7 +32,7 @@ def setup_jwt_callbacks(app):
         except (ValueError, TypeError):
             return None
 
-    @app.jwt.additional_claims_loader
+    @jwt.additional_claims_loader
     def add_claims_to_access_token(user):
         """Add additional claims to access token."""
         if isinstance(user, User):
@@ -43,7 +45,7 @@ def setup_jwt_callbacks(app):
             }
         return {}
 
-    @app.jwt.expired_token_loader
+    @jwt.expired_token_loader
     def expired_token_callback(jwt_header, jwt_data):
         """Handle expired tokens."""
         return (
@@ -57,7 +59,7 @@ def setup_jwt_callbacks(app):
             HTTP_STATUS.UNAUTHORIZED,
         )
 
-    @app.jwt.invalid_token_loader
+    @jwt.invalid_token_loader
     def invalid_token_callback(error):
         """Handle invalid tokens."""
         return (
@@ -71,7 +73,7 @@ def setup_jwt_callbacks(app):
             HTTP_STATUS.UNAUTHORIZED,
         )
 
-    @app.jwt.unauthorized_loader
+    @jwt.unauthorized_loader
     def missing_token_callback(error):
         """Handle missing tokens."""
         return (
@@ -85,7 +87,7 @@ def setup_jwt_callbacks(app):
             HTTP_STATUS.UNAUTHORIZED,
         )
 
-    @app.jwt.needs_fresh_token_loader
+    @jwt.needs_fresh_token_loader
     def fresh_token_required_callback(jwt_header, jwt_data):
         """Handle requests requiring fresh tokens."""
         return (
@@ -99,7 +101,7 @@ def setup_jwt_callbacks(app):
             HTTP_STATUS.UNAUTHORIZED,
         )
 
-    @app.jwt.revoked_token_loader
+    @jwt.revoked_token_loader
     def revoked_token_callback(jwt_header, jwt_data):
         """Handle revoked tokens."""
         return (
@@ -113,20 +115,14 @@ def setup_jwt_callbacks(app):
             HTTP_STATUS.UNAUTHORIZED,
         )
 
-    @app.jwt.token_in_blocklist_loader
+    @jwt.token_in_blocklist_loader
     def check_if_token_revoked(jwt_header, jwt_data):
         """Check if token is in blocklist."""
-
         # Check if token is in blocklist (you can implement this with Redis)
         # For now, return False (token not revoked)
-        # In production, you'd check against a blocklist store
-
-        # Example with Redis:
-        # from app.extensions import cache
-        # in_blocklist = cache.get(f"blocklist:{jti}")
-        # return in_blocklist is not None
-
         return False
+
+    print("✅ JWT callbacks setup complete")
 
 
 def admin_required():

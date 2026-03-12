@@ -26,15 +26,14 @@ class BudgetSchema(SQLAlchemyAutoSchema):
     period = fields.String(
         required=True,
         validate=validate.OneOf(BudgetPeriod.choices()),
-        missing="monthly",
     )
     month = fields.Integer(allow_none=True, validate=validate.Range(min=1, max=12))
     year = fields.Integer(required=True, validate=validate.Range(min=2000, max=2100))
     alert_threshold = fields.Float(
-        validate=validate.Range(min=0, max=100), missing=80.0
+        validate=validate.Range(min=0, max=100), load_default=80.0
     )
-    is_active = fields.Boolean(missing=True)
-    rollover = fields.Boolean(missing=False)
+    is_active = fields.Boolean(load_default=True)
+    rollover = fields.Boolean(load_default=False)
     notes = fields.String(allow_none=True, validate=validate.Length(max=500))
     created_at = fields.DateTime(dump_only=True, format="%Y-%m-%d %H:%M:%S")
     updated_at = fields.DateTime(dump_only=True, format="%Y-%m-%d %H:%M:%S")
@@ -72,15 +71,15 @@ class BudgetCreateSchema(Schema):
     period = fields.String(
         required=True,
         validate=validate.OneOf(BudgetPeriod.choices()),
-        missing="monthly",
     )
     month = fields.Integer(allow_none=True, validate=validate.Range(min=1, max=12))
     year = fields.Integer(required=True, validate=validate.Range(min=2000, max=2100))
     alert_threshold = fields.Float(
-        validate=validate.Range(min=0, max=100), missing=80.0
+        validate=validate.Range(min=0, max=100),
+        load_default=80.0,  # ✅ OK - not required
     )
-    is_active = fields.Boolean(missing=True)
-    rollover = fields.Boolean(missing=False)
+    is_active = fields.Boolean(load_default=True)
+    rollover = fields.Boolean(load_default=False)
     notes = fields.String(allow_none=True, validate=validate.Length(max=500))
 
     @pre_load
@@ -136,7 +135,7 @@ class BudgetFilterSchema(Schema):
     year = fields.Integer(required=False, validate=validate.Range(min=2000, max=2100))
     month = fields.Integer(allow_none=True, validate=validate.Range(min=1, max=12))
     category_id = fields.Integer(allow_none=True)
-    is_active = fields.Boolean(missing=True)
+    is_active = fields.Boolean(load_default=True)
     period = fields.String(
         allow_none=True, validate=validate.OneOf(BudgetPeriod.choices())
     )

@@ -117,12 +117,12 @@ class AnalyticsFilterSchema(Schema):
     end_date = fields.Date(required=False, format="%Y-%m-%d")
     group_by = fields.String(
         validate=validate.OneOf(["day", "week", "month", "quarter", "year"]),
-        missing="month",
+        load_default="month",
     )
     type = fields.String(
-        validate=validate.OneOf(["income", "expense", "all"]), missing="all"
+        validate=validate.OneOf(["income", "expense", "all"]), load_default="all"
     )
-    categories = fields.List(fields.Integer(), missing=[])
+    categories = fields.List(fields.Integer(), load_default=[])
 
     @pre_load
     def validate_dates(self, data, **kwargs):

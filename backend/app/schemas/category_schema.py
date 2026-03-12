@@ -21,7 +21,9 @@ class CategorySchema(SQLAlchemyAutoSchema):
     id = fields.Integer(dump_only=True)
     name = fields.String(required=True, validate=validate.Length(min=1, max=50))
     type = fields.String(required=True, validate=validate.OneOf(CategoryType.choices()))
-    color = fields.String(validate=validate.Length(min=4, max=7), missing="#808080")
+    color = fields.String(
+        validate=validate.Length(min=4, max=7), load_default="#808080"
+    )
     icon = fields.String(allow_none=True, validate=validate.Length(max=50))
     description = fields.String(allow_none=True, validate=validate.Length(max=200))
     parent_id = fields.Integer(allow_none=True)
@@ -51,7 +53,10 @@ class CategoryCreateSchema(Schema):
 
     name = fields.String(required=True, validate=validate.Length(min=1, max=50))
     type = fields.String(required=True, validate=validate.OneOf(CategoryType.choices()))
-    color = fields.String(validate=validate.Length(min=4, max=7), missing="#808080")
+    color = fields.String(
+        validate=validate.Length(min=4, max=7),
+        load_default="#808080",  # ✅ Changed from missing="#808080"
+    )
     icon = fields.String(allow_none=True, validate=validate.Length(max=50))
     description = fields.String(allow_none=True, validate=validate.Length(max=200))
     parent_id = fields.Integer(allow_none=True)
@@ -121,8 +126,8 @@ class CategoryFilterSchema(Schema):
     """Schema for category filters."""
 
     type = fields.String(validate=validate.OneOf(CategoryType.choices()))
-    include_system = fields.Boolean(missing=True)
-    include_inactive = fields.Boolean(missing=False)
+    include_system = fields.Boolean(load_default=True)
+    include_inactive = fields.Boolean(load_default=False)
     parent_id = fields.Integer(allow_none=True)
     search = fields.String(allow_none=True)
 

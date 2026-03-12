@@ -32,8 +32,8 @@ class TransactionSchema(SQLAlchemyAutoSchema):
     )
     notes = fields.String(allow_none=True, validate=validate.Length(max=5000))
     receipt_path = fields.String(allow_none=True)
-    tags = fields.List(fields.String(), missing=list)
-    is_recurring = fields.Boolean(missing=False)
+    tags = fields.List(fields.String(), load_default=list)
+    is_recurring = fields.Boolean(load_default=False)
     recurring_frequency = fields.String(
         allow_none=True,
         validate=validate.OneOf(["daily", "weekly", "monthly", "yearly"]),
@@ -104,13 +104,13 @@ class TransactionCreateSchema(Schema):
     category_id = fields.Integer(required=True, validate=validate.Range(min=1))
     amount = fields.Float(required=True, validate=validate.Range(min=0.01))
     description = fields.String(required=True, validate=validate.Length(min=1, max=200))
-    date = fields.Date(required=True, missing=lambda: datetime.now().date())
+    date = fields.Date(required=True)
     type = fields.String(
         required=True, validate=validate.OneOf(TransactionType.choices())
     )
     notes = fields.String(allow_none=True, validate=validate.Length(max=5000))
-    tags = fields.List(fields.String(), missing=list)
-    is_recurring = fields.Boolean(missing=False)
+    tags = fields.List(fields.String(), load_default=list)
+    is_recurring = fields.Boolean(load_default=False)
     recurring_frequency = fields.String(
         allow_none=True,
         validate=validate.OneOf(["daily", "weekly", "monthly", "yearly"]),
@@ -148,7 +148,7 @@ class TransactionCreateSchema(Schema):
     @post_load
     def set_defaults(self, data, **kwargs):
         """Set default values."""
-        if "date" not in data:
+        if "date" not in data:  # This will handle when date is not provided
             data["date"] = datetime.now().date()
 
         if "tags" not in data:
@@ -260,8 +260,8 @@ class TransactionImportSchema(Schema):
         validate=validate.OneOf(["csv", "json", "excel", "bank_statement"]),
     )
     mapping = fields.Dict(required=True)  # Column mapping for CSV
-    dry_run = fields.Boolean(missing=False)  # Validate without importing
-    skip_duplicates = fields.Boolean(missing=True)
+    dry_run = fields.Boolean(load_default=False)
+    skip_duplicates = fields.Boolean(load_default=True)
 
     @pre_load
     def validate_mapping(self, data, **kwargs):

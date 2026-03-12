@@ -4,31 +4,15 @@ Category model for transaction categorization.
 
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, Index
+from sqlalchemy import CheckConstraint, Index, text
 from sqlalchemy.dialects.postgresql import JSONB
 
 from app.extensions import db
-from app.models.transaction import Transaction
 
 
 class Category(db.Model):
     """
     Category model for organizing transactions.
-
-    Attributes:
-        id: Primary key
-        name: Category name
-        type: income/expense/transfer
-        color: Hex color code for UI
-        icon: Icon identifier
-        description: Category description
-        parent_id: Parent category for hierarchies
-        user_id: User ID (null for system categories)
-        is_system: Whether category is system-defined
-        is_active: Whether category is active
-        metadata: JSONB for additional data
-        created_at: Timestamp
-        updated_at: Timestamp
     """
 
     __tablename__ = "categories"
@@ -54,8 +38,8 @@ class Category(db.Model):
     is_system = db.Column(db.Boolean, default=False)
     is_active = db.Column(db.Boolean, default=True)
 
-    # Additional metadata
-    metadata = db.Column(JSONB, default={})
+    # Additional metadata - renamed from 'metadata' to avoid reserved name
+    meta_data = db.Column(JSONB, default={})
 
     # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
@@ -63,14 +47,18 @@ class Category(db.Model):
         db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
     )
 
-    # Relationships
+    # Relationships - use back_populates instead of backref
     transactions = db.relationship(
         "Transaction",
-        backref="category",
+        back_populates="category",
         lazy="dynamic",
         foreign_keys="Transaction.category_id",
     )
-    budgets = db.relationship("Budget", backref="category", lazy="dynamic")
+    budgets = db.relationship(
+        "Budget",
+        back_populates="category",  # Changed from backref='category'
+        lazy="dynamic",
+    )
     children = db.relationship(
         "Category", backref=db.backref("parent", remote_side=[id]), lazy="dynamic"
     )
@@ -102,11 +90,13 @@ class Category(db.Model):
     @property
     def total_amount(self):
         """Get total amount of all transactions in this category."""
-        return (
-            db.session.query(db.func.coalesce(db.func.sum(Transaction.amount), 0))
-            .filter(Transaction.category_id == self.id)
-            .scalar()
-        )
+        result = db.session.execute(
+            text(
+                "SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE category_id = :cat_id"
+            ),
+            {"cat_id": self.id},
+        ).scalar()
+        return float(result or 0)
 
     def to_dict(self, include_stats=False):
         """
@@ -129,6 +119,7 @@ class Category(db.Model):
             "user_id": self.user_id,
             "is_system": self.is_system,
             "is_active": self.is_active,
+            "meta_data": self.meta_data,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }

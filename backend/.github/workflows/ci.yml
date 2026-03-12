@@ -51,6 +51,16 @@ jobs:
     - name: Install dependencies
       run: uv pip install -e ".[dev]"
     
+    - name: Create .env file for testing
+      run: |
+        cat > .env << EOF
+        FLASK_ENV=testing
+        DATABASE_URL=postgresql://postgres:postgres@localhost:5432/finviz_test
+        REDIS_URL=redis://localhost:6379/0
+        SECRET_KEY=test-secret-key
+        JWT_SECRET_KEY=test-jwt-secret
+        EOF
+    
     - name: Lint with flake8
       run: |
         flake8 app/ tests/ --count --select=E9,F63,F7,F82 --show-source --statistics
@@ -60,12 +70,6 @@ jobs:
       run: mypy app/
     
     - name: Test with pytest
-      env:
-        FLASK_ENV: testing
-        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/finviz_test
-        REDIS_URL: redis://localhost:6379/0
-        SECRET_KEY: test-secret-key
-        JWT_SECRET_KEY: test-jwt-secret
       run: |
         pytest --cov=app --cov-report=xml --cov-report=term
     

@@ -115,7 +115,7 @@ def create_categories(user):
         if not existing:
             category = Category(
                 name=sys_cat.name,
-                type=sys_cat.type,
+                type=sys_cat.type,  # This is a string
                 color=sys_cat.color,
                 icon=sys_cat.icon,
                 user_id=user.id,
@@ -141,9 +141,10 @@ def create_transactions(user, count):
         tx_date = start_date + timedelta(days=random.randint(0, 365))
         category = random.choice(categories)
         
-        if category.type.value == 'income':
+        # Check type as string (not enum)
+        if category.type == 'income':  # ✅ Fixed
             amount = random.uniform(500, 5000)
-        else:
+        else:  # expense or transfer
             amount = random.uniform(5, 500)
         
         transaction = Transaction(
@@ -152,7 +153,7 @@ def create_transactions(user, count):
             amount=round(amount, 2),
             description=fake.sentence(nb_words=4),
             date=tx_date,
-            type=category.type.value
+            type=category.type  # This is already a string
         )
         transactions.append(transaction)
     
@@ -163,7 +164,7 @@ def create_budgets(user):
     """Create budgets for user."""
     expense_cats = Category.query.filter_by(
         user_id=user.id,
-        type='expense'
+        type='expense'  # String, not enum
     ).all()
     
     if not expense_cats:
@@ -174,7 +175,13 @@ def create_budgets(user):
     
     budgets = []
     
-    for category in random.sample(expense_cats, min(5, len(expense_cats))):
+    # Select random categories for budgets
+    selected_categories = random.sample(
+        expense_cats, 
+        min(5, len(expense_cats))
+    )
+    
+    for category in selected_categories:
         budget = Budget(
             user_id=user.id,
             category_id=category.id,
@@ -192,4 +199,3 @@ def create_budgets(user):
 
 if __name__ == '__main__':
     main()
-    

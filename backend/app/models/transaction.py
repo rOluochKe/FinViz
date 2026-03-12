@@ -4,35 +4,15 @@ Transaction model for financial transactions.
 
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, Index, func
+from sqlalchemy import CheckConstraint, Index, text
 from sqlalchemy.dialects.postgresql import JSONB
 
 from app.extensions import db
-from app.models.category import Category
 
 
 class Transaction(db.Model):
     """
     Transaction model representing financial transactions.
-
-    Attributes:
-        id: Primary key
-        user_id: Reference to user
-        category_id: Reference to category
-        amount: Transaction amount
-        description: Transaction description
-        date: Transaction date
-        type: income/expense/transfer
-        notes: Additional notes
-        receipt_path: Path to receipt file (local storage)
-        tags: JSONB array of tags
-        is_recurring: Whether transaction is recurring
-        recurring_frequency: Frequency for recurring transactions
-        recurring_end_date: End date for recurring
-        parent_transaction_id: For recurring/related transactions
-        metadata: Additional metadata
-        created_at: Timestamp
-        updated_at: Timestamp
     """
 
     __tablename__ = "transactions"
@@ -71,8 +51,8 @@ class Transaction(db.Model):
         db.Integer, db.ForeignKey("transactions.id"), index=True
     )
 
-    # Additional metadata
-    metadata = db.Column(JSONB, default={})
+    # Additional metadata - renamed from 'metadata' to avoid reserved name
+    meta_data = db.Column(JSONB, default={})
 
     # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
@@ -84,6 +64,8 @@ class Transaction(db.Model):
     child_transactions = db.relationship(
         "Transaction", backref=db.backref("parent", remote_side=[id]), lazy="dynamic"
     )
+    # Add back_populates to match category
+    category = db.relationship("Category", back_populates="transactions")
 
     # Indexes for performance
     __table_args__ = (
@@ -188,6 +170,7 @@ class Transaction(db.Model):
         Returns:
             dict: Monthly summary
         """
+        from sqlalchemy import func
 
         start_date = datetime(year, month, 1).date()
         if month == 12:
@@ -234,31 +217,33 @@ class Transaction(db.Model):
         Returns:
             list: Category breakdown
         """
+        query = """
+            SELECT 
+                c.name as category_name,
+                c.color as category_color,
+                COALESCE(SUM(t.amount), 0) as total,
+                COUNT(t.id) as count
+            FROM transactions t
+            JOIN categories c ON t.category_id = c.id
+            WHERE t.user_id = :user_id
+                AND t.type = :tx_type
+        """
 
-        query = (
-            db.session.query(
-                Category.name.label("category_name"),
-                Category.color.label("category_color"),
-                func.coalesce(func.sum(cls.amount), 0).label("total"),
-                func.count().label("count"),
-            )
-            .join(Category, cls.category_id == Category.id)
-            .filter(cls.user_id == user_id, cls.type == transaction_type)
-        )
+        params = {"user_id": user_id, "tx_type": transaction_type}
 
         if start_date:
-            query = query.filter(cls.date >= start_date)
-
+            query += " AND t.date >= :start_date"
+            params["start_date"] = start_date
         if end_date:
-            query = query.filter(cls.date <= end_date)
+            query += " AND t.date <= :end_date"
+            params["end_date"] = end_date
 
-        results = (
-            query.group_by(Category.id, Category.name, Category.color)
-            .order_by(func.sum(cls.amount).desc())
-            .all()
-        )
+        query += " GROUP BY c.id, c.name, c.color ORDER BY total DESC"
 
-        total = sum(r.total for r in results) or 1  # Avoid division by zero
+        result = db.session.execute(text(query), params)
+
+        rows = result.fetchall()
+        total = sum(r.total for r in rows) or 1
 
         return [
             {
@@ -268,7 +253,7 @@ class Transaction(db.Model):
                 "count": r.count,
                 "percentage": (float(r.total) / total * 100),
             }
-            for r in results
+            for r in rows
         ]
 
     def to_dict(self, include_relationships=True):
@@ -297,14 +282,21 @@ class Transaction(db.Model):
             "recurring_end_date": (
                 self.recurring_end_date.isoformat() if self.recurring_end_date else None
             ),
+            "meta_data": self.meta_data,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
             "formatted_amount": self.formatted_amount,
         }
 
-        if include_relationships and self.category:
-            data["category_name"] = self.category.name
-            data["category_color"] = self.category.color
+        # Lazy load category data to avoid circular imports
+        if include_relationships and self.category_id:
+            result = db.session.execute(
+                text("SELECT name, color FROM categories WHERE id = :id"),
+                {"id": self.category_id},
+            ).first()
+            if result:
+                data["category_name"] = result.name
+                data["category_color"] = result.color
 
         return data
 

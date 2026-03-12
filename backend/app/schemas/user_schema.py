@@ -113,7 +113,7 @@ class UserUpdateSchema(Schema):
 class UserLoginSchema(Schema):
     """Schema for user login."""
 
-    username = fields.String(required=True, description="Username or email")
+    username = fields.String(required=True)
     password = fields.String(required=True, load_only=True)
 
 

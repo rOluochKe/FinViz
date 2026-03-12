@@ -412,7 +412,7 @@ def chunks(lst, chunk_size):
     Returns:
         List of chunks
     """
-    return [lst[i: i + chunk_size] for i in range(0, len(lst), chunk_size)]
+    return [lst[i : i + chunk_size] for i in range(0, len(lst), chunk_size)]
 
 
 def deep_get(dictionary, path, default=None):

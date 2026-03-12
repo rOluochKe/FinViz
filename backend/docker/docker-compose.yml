@@ -4,18 +4,21 @@ services:
   postgres:
     image: postgres:15-alpine
     container_name: finviz-postgres
+    env_file:
+      - ../.env  # Load from root .env file
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: finviz_dev
+      # Only override if not in .env, but prefer .env values
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-finviz_dev}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - ./data/postgres:/var/lib/postgresql/data
     networks:
       - finviz-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -23,8 +26,10 @@ services:
   redis:
     image: redis:7-alpine
     container_name: finviz-redis
+    env_file:
+      - ../.env
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"
     volumes:
       - ./data/redis:/data
     networks:
@@ -40,12 +45,11 @@ services:
       context: ..
       dockerfile: docker/Dockerfile
     container_name: finviz-app
-    environment:
-      FLASK_ENV: development
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/finviz_dev
-      REDIS_URL: redis://redis:6379/0
+    env_file:
+      - ../.env  # Load ALL environment variables from .env
+    # No environment section needed - all vars come from .env
     ports:
-      - "5000:5000"
+      - "${FLASK_PORT:-5000}:5000"
     volumes:
       - ../uploads:/app/uploads
       - ../logs:/app/logs
@@ -59,7 +63,7 @@ services:
     command: >
       sh -c "
         flask db upgrade &&
-        gunicorn --bind 0.0.0.0:5000 --workers 4 --reload wsgi:app
+        gunicorn --bind 0.0.0.0:${GUNICORN_PORT:-5000} --workers ${GUNICORN_WORKERS:-4} wsgi:app
       "
 
   test:
@@ -67,10 +71,9 @@ services:
       context: ..
       dockerfile: docker/Dockerfile
     container_name: finviz-test
-    environment:
-      FLASK_ENV: testing
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/finviz_test
-      REDIS_URL: redis://redis:6379/1
+    env_file:
+      - ../.env
+    # No environment section needed
     volumes:
       - ../tests:/app/tests
       - ../.coverage:/app/.coverage
@@ -89,3 +92,4 @@ services:
 networks:
   finviz-network:
     driver: bridge
+    

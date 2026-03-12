@@ -14,6 +14,39 @@ from app.extensions import limiter
 from app.utils.constants import HTTP_STATUS
 
 
+def admin_required():
+    """
+    Decorator factory for admin required.
+
+    Returns:
+        Decorator function
+    """
+
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            verify_jwt_in_request()
+            claims = get_jwt()
+
+            if not claims.get("is_admin", False):
+                return (
+                    jsonify(
+                        {
+                            "error": "admin_required",
+                            "message": "Admin access required",
+                            "status_code": HTTP_STATUS.FORBIDDEN,
+                        }
+                    ),
+                    HTTP_STATUS.FORBIDDEN,
+                )
+
+            return f(*args, **kwargs)
+
+        return decorated_function
+
+    return decorator
+
+
 def validate_request(schema_class):
     """
     Decorator to validate request data against a Marshmallow schema.

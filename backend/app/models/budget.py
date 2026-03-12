@@ -2,32 +2,16 @@
 Budget model for spending limits by category.
 """
 
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 
-from sqlalchemy import CheckConstraint, Index, func
+from sqlalchemy import CheckConstraint, Index, text
 
 from app.extensions import db
-from app.models.transaction import Transaction
 
 
 class Budget(db.Model):
     """
     Budget model for spending limits.
-
-    Attributes:
-        id: Primary key
-        user_id: Reference to user
-        category_id: Reference to category
-        amount: Budget amount
-        period: monthly/quarterly/yearly
-        month: Month (for monthly budgets)
-        year: Year
-        alert_threshold: Percentage to trigger alert
-        is_active: Whether budget is active
-        rollover: Whether to rollover unused amount
-        notes: Additional notes
-        created_at: Timestamp
-        updated_at: Timestamp
     """
 
     __tablename__ = "budgets"
@@ -66,6 +50,9 @@ class Budget(db.Model):
         db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
     )
 
+    # Relationships - use back_populates
+    category = db.relationship("Category", back_populates="budgets", lazy="joined")
+
     # Indexes and constraints
     __table_args__ = (
         db.UniqueConstraint(
@@ -94,32 +81,33 @@ class Budget(db.Model):
     @property
     def spent(self):
         """Get amount spent in this budget period."""
+        query = """
+            SELECT COALESCE(SUM(amount), 0)
+            FROM transactions
+            WHERE user_id = :user_id
+                AND category_id = :cat_id
+                AND type = 'expense'
+        """
 
-        query = db.session.query(func.coalesce(func.sum(Transaction.amount), 0)).filter(
-            Transaction.user_id == self.user_id,
-            Transaction.category_id == self.category_id,
-            Transaction.type == "expense",
-        )
+        params = {"user_id": self.user_id, "cat_id": self.category_id}
 
         if self.period == "monthly":
-            query = query.filter(
-                db.extract("year", Transaction.date) == self.year,
-                db.extract("month", Transaction.date) == self.month,
-            )
-        elif self.period == "quarterly":
-            if self.month:
-                start_month = (self.month - 1) * 3 + 1
-                end_month = start_month + 2
-                query = query.filter(
-                    db.extract("year", Transaction.date) == self.year,
-                    db.extract("month", Transaction.date).between(
-                        start_month, end_month
-                    ),
-                )
+            query += " AND EXTRACT(YEAR FROM date) = :year AND EXTRACT(MONTH FROM date) = :month"
+            params["year"] = self.year
+            params["month"] = self.month
+        elif self.period == "quarterly" and self.month:
+            start_month = (self.month - 1) * 3 + 1
+            end_month = start_month + 2
+            query += """ AND EXTRACT(YEAR FROM date) = :year 
+                         AND EXTRACT(MONTH FROM date) BETWEEN :start_month AND :end_month"""
+            params["start_month"] = start_month
+            params["end_month"] = end_month
         else:  # yearly
-            query = query.filter(db.extract("year", Transaction.date) == self.year)
+            query += " AND EXTRACT(YEAR FROM date) = :year"
+            params["year"] = self.year
 
-        return float(query.scalar())
+        result = db.session.execute(text(query), params).scalar()
+        return float(result or 0)
 
     @property
     def remaining(self):
@@ -150,6 +138,7 @@ class Budget(db.Model):
         Returns:
             dict: Projection data
         """
+        from datetime import timedelta
 
         today = date.today()
 
@@ -157,11 +146,9 @@ class Budget(db.Model):
         if self.period == "monthly":
             if not self.month:
                 return None
-            # Approximate days in month
             if self.month in [4, 6, 9, 11]:
                 days_in_period = 30
             elif self.month == 2:
-                # Check leap year
                 if self.year % 4 == 0 and (
                     self.year % 100 != 0 or self.year % 400 == 0
                 ):
@@ -178,7 +165,7 @@ class Budget(db.Model):
         elif self.period == "quarterly":
             if not self.month:
                 return None
-            days_in_period = 91  # Approximate
+            days_in_period = 91
             start_month = (self.month - 1) * 3 + 1
             period_start = date(self.year, start_month, 1)
             days_passed = (today - period_start).days + 1
@@ -190,25 +177,31 @@ class Budget(db.Model):
             days_passed = (today - period_start).days + 1
             days_remaining = days_in_period - days_passed
 
-        # Avoid division by zero
         if days_passed <= 0:
             days_passed = 1
 
-        # Average daily spend
         avg_daily = self.spent / days_passed
-
-        # Projected spend
         projected = self.spent + (avg_daily * max(days_remaining, 0))
 
         # Get recent transaction count for confidence
         thirty_days_ago = today - timedelta(days=30)
-        recent_count = Transaction.query.filter(
-            Transaction.user_id == self.user_id,
-            Transaction.category_id == self.category_id,
-            Transaction.type == "expense",
-            Transaction.date >= thirty_days_ago,
-        ).count()
+        result = db.session.execute(
+            text("""
+                SELECT COUNT(*) 
+                FROM transactions 
+                WHERE user_id = :user_id 
+                    AND category_id = :cat_id 
+                    AND type = 'expense'
+                    AND date >= :cutoff
+            """),
+            {
+                "user_id": self.user_id,
+                "cat_id": self.category_id,
+                "cutoff": thirty_days_ago,
+            },
+        ).scalar()
 
+        recent_count = result or 0
         confidence = min((recent_count / 10) * 100, 100) if recent_count > 0 else 50
 
         return {
