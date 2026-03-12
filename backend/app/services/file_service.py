@@ -5,125 +5,83 @@ File service for local file storage operations.
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import BinaryIO, Optional
+from typing import BinaryIO, Dict, Optional
 
 from flask import current_app
 from werkzeug.utils import secure_filename
 
 
 class FileService:
-    """Service for handling local file storage."""
+    """Service for local file operations."""
 
-    ALLOWED_EXTENSIONS = {
-        "png",
-        "jpg",
-        "jpeg",
-        "gif",
-        "pdf",
-        "csv",
-        "xlsx",
-        "xls",
-        "txt",
-    }
-    ALLOWED_MIMETYPES = {
-        "image/png",
-        "image/jpeg",
-        "image/gif",
-        "application/pdf",
-        "text/csv",
-        "application/vnd.ms-excel",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "text/plain",
-    }
+    ALLOWED_EXT = {"png", "jpg", "jpeg", "gif", "pdf", "csv", "xlsx", "txt"}
 
     def __init__(self):
-        self.base_upload_dir = Path(current_app.config.get("UPLOAD_FOLDER", "uploads"))
-        self.max_size = current_app.config.get("MAX_CONTENT_LENGTH", 16 * 1024 * 1024)
+        self.base = Path(current_app.config.get("UPLOAD_FOLDER", "uploads"))
+        self.receipts = self.base / "receipts"
+        self.exports = self.base / "exports"
+        self.temp = self.base / "temp"
+        self._ensure_dirs()
 
-        # Create subdirectories
-        self.receipts_dir = self.base_upload_dir / "receipts"
-        self.exports_dir = self.base_upload_dir / "exports"
-        self.temp_dir = self.base_upload_dir / "temp"
-
-        self._ensure_directories()
-
-    def _ensure_directories(self):
-        """Ensure all required directories exist."""
-        for directory in [self.receipts_dir, self.exports_dir, self.temp_dir]:
-            directory.mkdir(parents=True, exist_ok=True)
+    def _ensure_dirs(self):
+        """Create required directories."""
+        for d in [self.receipts, self.exports, self.temp]:
+            d.mkdir(parents=True, exist_ok=True)
 
     @staticmethod
     def allowed_file(filename: str) -> bool:
         """Check if file extension is allowed."""
         return (
             "." in filename
-            and filename.rsplit(".", 1)[1].lower() in FileService.ALLOWED_EXTENSIONS
+            and filename.rsplit(".", 1)[1].lower() in FileService.ALLOWED_EXT
         )
 
-    @staticmethod
-    def allowed_mimetype(mimetype: str) -> bool:
-        """Check if mimetype is allowed."""
-        return mimetype in FileService.ALLOWED_MIMETYPES
-
-    def save_receipt(
-        self, file: BinaryIO, original_filename: str, user_id: int
-    ) -> dict:
+    def save_receipt(self, file: BinaryIO, filename: str, user_id: int) -> Dict:
         """
-        Save a receipt file locally.
+        Save receipt file locally.
 
         Args:
             file: File object
-            original_filename: Original filename
+            filename: Original filename
             user_id: User ID
 
         Returns:
             Dict with file info
         """
-        # Secure filename and generate unique name
-        secure_name = secure_filename(original_filename)
-        ext = secure_name.rsplit(".", 1)[1].lower() if "." in secure_name else ""
-        unique_name = f"{uuid.uuid4().hex}_{int(datetime.now().timestamp())}.{ext}"
+        secure = secure_filename(filename)
+        ext = secure.rsplit(".", 1)[1].lower() if "." in secure else ""
+        unique = f"{uuid.uuid4().hex}.{ext}"
 
-        # Create user-specific subdirectory
-        user_dir = self.receipts_dir / str(user_id)
+        user_dir = self.receipts / str(user_id)
         user_dir.mkdir(exist_ok=True)
 
-        # Save file
-        file_path = user_dir / unique_name
-        file.save(str(file_path))
+        path = user_dir / unique
+        file.save(str(path))
 
         return {
-            "filename": unique_name,
-            "original_filename": secure_name,
-            "path": str(file_path.relative_to(self.base_upload_dir)),
-            "size": file_path.stat().st_size,
-            "mimetype": file.mimetype,
-            "url": f"/uploads/{file_path.relative_to(self.base_upload_dir)}",
+            "filename": unique,
+            "original": secure,
+            "path": str(path.relative_to(self.base)),
+            "size": path.stat().st_size,
+            "url": f"/uploads/{path.relative_to(self.base)}",
         }
 
-    def get_receipt_path(self, filename: str, user_id: int) -> Optional[Path]:
-        """Get full path to a receipt file."""
-        user_dir = self.receipts_dir / str(user_id)
-        file_path = user_dir / filename
-
-        if file_path.exists() and file_path.is_file():
-            return file_path
-
-        return None
+    def get_receipt(self, filename: str, user_id: int) -> Optional[Path]:
+        """Get receipt file path."""
+        path = self.receipts / str(user_id) / filename
+        return path if path.exists() and path.is_file() else None
 
     def delete_receipt(self, filename: str, user_id: int) -> bool:
-        """Delete a receipt file."""
-        file_path = self.get_receipt_path(filename, user_id)
-
-        if file_path and file_path.exists():
-            file_path.unlink()
+        """Delete receipt file."""
+        path = self.get_receipt(filename, user_id)
+        if path:
+            path.unlink()
             return True
-
         return False
 
-    def save_export(self, data: bytes, filename: str, user_id: int) -> dict:
+    def save_export(self, data: bytes, filename: str, user_id: int) -> Dict:
         """
-        Save an exported file.
+        Save export file.
 
         Args:
             data: File data
@@ -133,108 +91,81 @@ class FileService:
         Returns:
             Dict with file info
         """
-        secure_name = secure_filename(filename)
-
-        # Create user-specific subdirectory
-        user_dir = self.exports_dir / str(user_id)
+        secure = secure_filename(filename)
+        user_dir = self.exports / str(user_id)
         user_dir.mkdir(exist_ok=True)
 
-        # Save file
-        file_path = user_dir / secure_name
-        with open(file_path, "wb") as f:
+        path = user_dir / secure
+        with open(path, "wb") as f:
             f.write(data)
 
         return {
-            "filename": secure_name,
-            "path": str(file_path.relative_to(self.base_upload_dir)),
-            "size": file_path.stat().st_size,
-            "url": f"/uploads/{file_path.relative_to(self.base_upload_dir)}",
+            "filename": secure,
+            "path": str(path.relative_to(self.base)),
+            "size": path.stat().st_size,
+            "url": f"/uploads/{path.relative_to(self.base)}",
         }
 
-    def get_export_path(self, filename: str, user_id: int) -> Optional[Path]:
-        """Get full path to an export file."""
-        user_dir = self.exports_dir / str(user_id)
-        file_path = user_dir / filename
+    def save_temp(self, file: BinaryIO, filename: str) -> Dict:
+        """Save temporary file."""
+        secure = secure_filename(filename)
+        unique = f"temp_{uuid.uuid4().hex}_{secure}"
 
-        if file_path.exists() and file_path.is_file():
-            return file_path
-
-        return None
-
-    def save_temp(self, file: BinaryIO, original_filename: str) -> dict:
-        """
-        Save a temporary file.
-
-        Args:
-            file: File object
-            original_filename: Original filename
-
-        Returns:
-            Dict with file info
-        """
-        secure_name = secure_filename(original_filename)
-        unique_name = f"temp_{uuid.uuid4().hex}_{secure_name}"
-
-        file_path = self.temp_dir / unique_name
-        file.save(str(file_path))
+        path = self.temp / unique
+        file.save(str(path))
 
         return {
-            "filename": unique_name,
-            "original_filename": secure_name,
-            "path": str(file_path.relative_to(self.base_upload_dir)),
-            "size": file_path.stat().st_size,
-            "url": f"/uploads/{file_path.relative_to(self.base_upload_dir)}",
+            "filename": unique,
+            "original": secure,
+            "path": str(path.relative_to(self.base)),
+            "size": path.stat().st_size,
         }
 
-    def cleanup_temp(self, max_age_hours: int = 24):
-        """Clean up temporary files older than max_age_hours."""
-        cutoff = datetime.now().timestamp() - (max_age_hours * 3600)
+    def cleanup_temp(self, hours: int = 24) -> int:
+        """Delete temp files older than hours."""
+        cutoff = datetime.now().timestamp() - (hours * 3600)
         deleted = 0
 
-        for file_path in self.temp_dir.glob("*"):
-            if file_path.is_file() and file_path.stat().st_mtime < cutoff:
-                file_path.unlink()
+        for p in self.temp.glob("*"):
+            if p.is_file() and p.stat().st_mtime < cutoff:
+                p.unlink()
                 deleted += 1
 
         return deleted
 
-    def get_user_storage_usage(self, user_id: int) -> dict:
-        """Get storage usage for a user."""
-        receipts_dir = self.receipts_dir / str(user_id)
-        exports_dir = self.exports_dir / str(user_id)
+    def get_user_usage(self, user_id: int) -> Dict:
+        """Get storage usage for user."""
+        receipts = self.receipts / str(user_id)
+        exports = self.exports / str(user_id)
 
-        receipts_size = 0
-        receipts_count = 0
+        r_size = (
+            sum(f.stat().st_size for f in receipts.glob("*") if f.is_file())
+            if receipts.exists()
+            else 0
+        )
+        r_count = len(list(receipts.glob("*"))) if receipts.exists() else 0
 
-        if receipts_dir.exists():
-            for file_path in receipts_dir.glob("*"):
-                if file_path.is_file():
-                    receipts_size += file_path.stat().st_size
-                    receipts_count += 1
-
-        exports_size = 0
-        exports_count = 0
-
-        if exports_dir.exists():
-            for file_path in exports_dir.glob("*"):
-                if file_path.is_file():
-                    exports_size += file_path.stat().st_size
-                    exports_count += 1
+        e_size = (
+            sum(f.stat().st_size for f in exports.glob("*") if f.is_file())
+            if exports.exists()
+            else 0
+        )
+        e_count = len(list(exports.glob("*"))) if exports.exists() else 0
 
         return {
             "receipts": {
-                "count": receipts_count,
-                "size": receipts_size,
-                "size_mb": round(receipts_size / (1024 * 1024), 2),
+                "count": r_count,
+                "size": r_size,
+                "mb": round(r_size / (1024 * 1024), 2),
             },
             "exports": {
-                "count": exports_count,
-                "size": exports_size,
-                "size_mb": round(exports_size / (1024 * 1024), 2),
+                "count": e_count,
+                "size": e_size,
+                "mb": round(e_size / (1024 * 1024), 2),
             },
             "total": {
-                "count": receipts_count + exports_count,
-                "size": receipts_size + exports_size,
-                "size_mb": round((receipts_size + exports_size) / (1024 * 1024), 2),
+                "count": r_count + e_count,
+                "size": r_size + e_size,
+                "mb": round((r_size + e_size) / (1024 * 1024), 2),
             },
         }
