@@ -6,9 +6,9 @@ import time
 from functools import wraps
 
 from flask import current_app, jsonify, request
+from flask_jwt_extended import get_jwt, get_jwt_identity
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-from flask_jwt_extended import get_jwt_identity, get_jwt, get_jwt_identity
 
 from app.utils.constants import HTTP_STATUS
 

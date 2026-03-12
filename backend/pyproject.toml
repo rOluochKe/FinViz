@@ -78,6 +78,19 @@ dev = [
     "pytest-xdist>=3.8.0",
 ]
 
+[tool.pre-commit]
+# Pre-commit configuration
+install = true
+
+[tool.pre-commit.hooks]
+trailing-whitespace = true
+end-of-file-fixer = true
+check-yaml = true
+check-json = true
+check-merge-conflict = true
+debug-statements = true
+detect-private-key = true
+
 [tool.black]
 line-length = 88
 target-version = ["py311"]
