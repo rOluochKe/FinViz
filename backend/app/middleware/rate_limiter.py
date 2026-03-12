@@ -8,6 +8,7 @@ from functools import wraps
 from flask import current_app, jsonify, request
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+from flask_jwt_extended import get_jwt_identity, get_jwt, get_jwt_identity
 
 from app.utils.constants import HTTP_STATUS
 
@@ -19,7 +20,6 @@ def get_rate_limit_key():
     Returns:
         Rate limit key string
     """
-    from flask_jwt_extended import get_jwt_identity
 
     # Try to get authenticated user
     try:
@@ -40,7 +40,6 @@ def get_user_rate_limit():
     Returns:
         Rate limit string
     """
-    from flask_jwt_extended import get_jwt_identity
 
     try:
         user_id = get_jwt_identity()
@@ -134,7 +133,6 @@ def dynamic_rate_limit():
     Returns:
         Rate limit string
     """
-    from flask_jwt_extended import get_jwt, get_jwt_identity
 
     # Check if user is authenticated
     try:
