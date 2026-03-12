@@ -2,6 +2,8 @@
 Integration tests for database operations.
 """
 
+from datetime import datetime
+
 import pytest
 from sqlalchemy import text
 

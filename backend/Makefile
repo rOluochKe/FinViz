@@ -78,10 +78,10 @@ lint:
 
 lint-fix:
 	@echo "$(GREEN)🔧 Auto-fixing linting issues...$(RESET)"
-	@command -v black >/dev/null 2>&1 || { echo "$(YELLOW}Installing black...$(RESET)"; pip install black; }
-	@command -v isort >/dev/null 2>&1 || { echo "$(YELLOW}Installing isort...$(RESET)"; pip install isort; }
-	@command -v autoflake >/dev/null 2>&1 || { echo "$(YELLOW}Installing autoflake...$(RESET)"; pip install autoflake; }
-	@command -v autopep8 >/dev/null 2>&1 || { echo "$(YELLOW}Installing autopep8...$(RESET)"; pip install autopep8; }
+	@command -v black >/dev/null 2>&1 || { echo "$(YELLOW)Installing black...$(RESET)"; pip install black; }
+	@command -v isort >/dev/null 2>&1 || { echo "$(YELLOW)Installing isort...$(RESET)"; pip install isort; }
+	@command -v autoflake >/dev/null 2>&1 || { echo "$(YELLOW)Installing autoflake...$(RESET)"; pip install autoflake; }
+	@command -v autopep8 >/dev/null 2>&1 || { echo "$(YELLOW)Installing autopep8...$(RESET)"; pip install autopep8; }
 	
 	@echo "$(GREEN)   Running black...$(RESET)"
 	black app/ tests/ --quiet
@@ -113,7 +113,7 @@ test:
 test-cov:
 	@echo "$(GREEN)📊 Running tests with coverage...$(RESET)"
 	pytest --cov=app --cov-report=term --cov-report=html
-	@echo "$(GREEN)✅ Coverage report generated:$(RESET) open htmlcov/index.html"
+	@echo "$(GREEN)✅ Coverage report generated: open htmlcov/index.html$(RESET)"
 
 test-watch:
 	@echo "$(GREEN)👀 Running tests in watch mode...$(RESET)"
@@ -158,7 +158,7 @@ db-init:
 		flask db init; \
 		echo "$(GREEN)✅ Migrations initialized!$(RESET)"; \
 	else \
-		echo "$(YELLOW}⚠️  Migrations already initialized$(RESET)"; \
+		echo "$(YELLOW)⚠️  Migrations already initialized$(RESET)"; \
 	fi
 
 db-migrate:
@@ -177,7 +177,7 @@ db-upgrade:
 	@echo "$(GREEN)✅ Migrations applied!$(RESET)"
 
 db-downgrade:
-	@echo "$(YELLOW}⬇️  Reverting last migration...$(RESET)"
+	@echo "$(YELLOW)⬇️  Reverting last migration...$(RESET)"
 	flask db downgrade
 	@echo "$(GREEN)✅ Migration reverted!$(RESET)"
 
@@ -185,7 +185,7 @@ db-reset:
 	@echo "$(RED)⚠️  WARNING: This will delete all data!$(RESET)"
 	@read -p "Are you sure? (y/N): " confirm; \
 	if [ "$$confirm" = "y" ] || [ "$$confirm" = "Y" ]; then \
-		echo "$(YELLOW}Dropping all tables...$(RESET)"; \
+		echo "$(YELLOW)Dropping all tables...$(RESET)"; \
 		flask db downgrade base; \
 		echo "$(GREEN)✅ Database reset!$(RESET)"; \
 	else \
@@ -208,7 +208,7 @@ backup:
 	@echo "$(GREEN)✅ Backup complete!$(RESET)"
 
 restore:
-	@echo "$(YELLOW}🔄 Restoring database from backup...$(RESET)"
+	@echo "$(YELLOW)🔄 Restoring database from backup...$(RESET)"
 	@read -p "Enter backup file path: " file; \
 	if [ ! -f "$$file" ]; then \
 		echo "$(RED)❌ Backup file not found: $$file$(RESET)"; \
@@ -221,7 +221,7 @@ restore:
 hooks-install:
 	@echo "$(GREEN)🔗 Installing pre-commit hooks...$(RESET)"
 	@command -v pre-commit >/dev/null 2>&1 || { \
-		echo "$(YELLOW}Installing pre-commit...$(RESET)"; \
+		echo "$(YELLOW)Installing pre-commit...$(RESET)"; \
 		pip install pre-commit; \
 	}
 	pre-commit install
@@ -238,7 +238,7 @@ hooks-update:
 	@echo "$(GREEN)✅ Hooks updated!$(RESET)"
 
 hooks-uninstall:
-	@echo "$(YELLOW}🗑️  Uninstalling pre-commit hooks...$(RESET)"
+	@echo "$(YELLOW)🗑️  Uninstalling pre-commit hooks...$(RESET)"
 	pre-commit uninstall
 	pre-commit uninstall --hook-type pre-push
 	@echo "$(GREEN)✅ Hooks uninstalled!$(RESET)"
@@ -253,7 +253,6 @@ clean:
 	find . -type d -name "*.egg-info" -exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name ".pytest_cache" -exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name ".mypy_cache" -exec rm -rf {} + 2>/dev/null || true
-	find . -type d -name ".coverage" -delete 2>/dev/null || true
 	rm -rf htmlcov .coverage 2>/dev/null || true
 	@echo "$(GREEN)✅ Cleanup complete!$(RESET)"
 

@@ -254,4 +254,4 @@ class MonthlyStat(db.Model):
         }
 
     def __repr__(self):
-        return f"<MonthlyStat {self.year}-{self.month}: ${self.total_income} / ${self.total_expense}>"
+        return f"<MonthlyStat {self.year}-{self.month}: ${self.total_income}/${self.total_expense}>"

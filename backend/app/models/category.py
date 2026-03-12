@@ -158,8 +158,8 @@ class Category(db.Model):
         """Get all categories for a user."""
         return (
             cls.query.filter(
-                db.or_(cls.is_system == True, cls.user_id == user_id),
-                cls.is_active == True,
+                db.or_(cls.is_system.is_(True), cls.user_id == user_id),
+                cls.is_active.is_(True),
             )
             .order_by(cls.type, cls.name)
             .all()

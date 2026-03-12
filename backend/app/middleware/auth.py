@@ -50,7 +50,7 @@ def setup_jwt_callbacks(app):
             jsonify(
                 {
                     "error": "token_expired",
-                    "message": "The access token has expired. Please refresh your token or login again.",
+                    "message": "Token expired. Please refresh or login again.",
                     "status_code": HTTP_STATUS.UNAUTHORIZED,
                 }
             ),
