@@ -4,35 +4,33 @@ Application factory module.
 
 import logging
 import os
+import platform
 from datetime import datetime
 
+import psutil
 from dotenv import load_dotenv
 from flask import Flask, jsonify
 from flask_cors import CORS
+from flask_restx import Api
+from sqlalchemy import text
+
+from app.routes import api_bp
+from app.routes.health import health_ns
+from app.routes.webhooks import webhooks_bp
 
 # Load .env file at the VERY beginning
 load_dotenv()
 
 from flask_jwt_extended import JWTManager
 
-from app.extensions import api, cache, db, limiter, migrate
+from app.extensions import cache, db, limiter, migrate
 from app.middleware.auth import setup_jwt_callbacks
 from app.middleware.error_handler import register_error_handlers
-from app.routes.admin import admin_bp
-from app.routes.analytics import analytics_bp
-from app.routes.auth import auth_bp
-from app.routes.budgets import budgets_bp
-from app.routes.categories import categories_bp
-from app.routes.dashboard import dashboard_bp
-from app.routes.exports import exports_bp
-from app.routes.health import health_bp
-from app.routes.imports import imports_bp
-from app.routes.reports import reports_bp
-from app.routes.transactions import transactions_bp
-from app.routes.users import users_bp
-from app.routes.webhooks import webhooks_bp
 from app.utils.constants import HTTP_STATUS
 from config import config
+
+# Store app start time for uptime calculation
+app_start_time = datetime.utcnow()
 
 
 def create_app(config_name=None):
@@ -48,54 +46,38 @@ def create_app(config_name=None):
     if config_name is None:
         config_name = os.getenv("FLASK_ENV", "development")
 
-    print(f"🔧 Creating app with config: {config_name}")
-
     app = Flask(__name__)
     app.config.from_object(config[config_name])
 
-    print("📦 Initializing extensions...")
-
     # Initialize extensions
     db.init_app(app)
-    print("  ✅ db initialized")
-
     migrate.init_app(app, db)
-    print("  ✅ migrate initialized")
 
-    # Initialize JWT directly
+    # Initialize JWT
     jwt = JWTManager(app)
-    print(f"  ✅ jwt initialized directly")
-    print(f"  ✅ app.jwt exists: {hasattr(app, 'jwt')}")
-
-    cache.init_app(app)
-    print("  ✅ cache initialized")
-
-    limiter.init_app(app)
-    print("  ✅ limiter initialized")
-
-    api.init_app(app)
-    print("  ✅ api initialized")
-
-    # Store jwt in app config for later use
     app.jwt_manager = jwt
 
-    # Setup logging - THIS FUNCTION WAS MISSING
-    setup_logging(app)
+    cache.init_app(app)
+    limiter.init_app(app)
 
     # Setup JWT callbacks
     setup_jwt_callbacks(app, jwt)
 
+    # Setup logging
+    setup_logging(app)
+
     # Setup error handlers
     register_error_handlers(app)
-
-    # Register blueprints
-    register_blueprints(app)
 
     # Create upload directories
     create_upload_directories(app)
 
-    # Add health check
-    add_health_check(app)
+    # Add root endpoint FIRST (before any blueprints)
+    add_root_endpoint(app)
+
+    # Register blueprints and namespaces
+    register_blueprints(app)
+    register_health_namespace(app)
 
     # Setup CORS
     CORS(app, resources={r"/api/*": {"origins": app.config["CORS_ORIGINS"]}})
@@ -109,7 +91,6 @@ def setup_logging(app):
     """Configure logging for the application."""
     log_level = getattr(logging, app.config.get("LOG_LEVEL", "INFO"))
 
-    # Create logs directory
     log_file = app.config.get("LOG_FILE", "logs/app.log")
     os.makedirs(os.path.dirname(log_file), exist_ok=True)
 
@@ -118,9 +99,6 @@ def setup_logging(app):
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         handlers=[logging.FileHandler(log_file), logging.StreamHandler()],
     )
-
-    # Set app logger level
-    app.logger.setLevel(log_level)
 
 
 def create_upload_directories(app):
@@ -140,64 +118,103 @@ def create_upload_directories(app):
 
 def register_blueprints(app):
     """Register all API blueprints."""
+    # Register the main API blueprint with Flask-RESTX
+    app.register_blueprint(api_bp)
 
-    blueprints = [
-        (auth_bp, "/api/auth"),
-        (users_bp, "/api/users"),
-        (categories_bp, "/api/categories"),
-        (transactions_bp, "/api/transactions"),
-        (budgets_bp, "/api/budgets"),
-        (analytics_bp, "/api/analytics"),
-        (dashboard_bp, "/api/dashboard"),
-        (reports_bp, "/api/reports"),
-        (imports_bp, "/api/imports"),
-        (exports_bp, "/api/exports"),
-        (health_bp, "/api/health"),
-        (webhooks_bp, "/api/webhooks"),
-        (admin_bp, "/api/admin"),
-    ]
-
-    for blueprint, prefix in blueprints:
-        app.register_blueprint(blueprint, url_prefix=prefix)
-        app.logger.debug(f"Registered blueprint: {blueprint.name}")
+    # Register webhooks blueprint (outside /api)
+    app.register_blueprint(webhooks_bp)
 
 
-def add_health_check(app):
-    """Add health check endpoint."""
+def register_health_namespace(app):
+    """Register health check namespace using Flask-RESTX."""
 
-    @app.route("/health")
-    def health_check():
-        """Health check endpoint."""
+    # Create a separate API for health endpoints
+    health_api = Api(
+        app,
+        version="1.0",
+        title="FinViz Pro Health API",
+        description="Health check endpoints (public)",
+        doc=False,  # Disable Swagger for health endpoints to avoid conflicts
+    )
+    health_api.add_namespace(health_ns, path="/health")
+
+
+def add_root_endpoint(app):
+    """Add root endpoint with API information."""
+    global app_start_time
+
+    @app.route("/")
+    def index():
+        """Root endpoint - API information."""
+        uptime = (datetime.utcnow() - app_start_time).seconds
+
+        # Get basic system info
         try:
-            # Check database
-            db.session.execute("SELECT 1")
-
-            # Check cache
-            if cache.cache:
-                cache.get("health_check")
-
-            return (
-                jsonify(
-                    {
-                        "status": "healthy",
-                        "environment": app.config["FLASK_ENV"],
-                        "database": "connected",
-                        "cache": "connected" if cache.cache else "disabled",
-                        "timestamp": datetime.utcnow().isoformat(),
-                    }
-                ),
-                200,
-            )
-
+            cpu_percent = psutil.cpu_percent(interval=0.1)
+            memory = psutil.virtual_memory()
         except Exception as e:
-            app.logger.error(f"Health check failed: {str(e)}")
-            return (
-                jsonify(
-                    {
-                        "status": "unhealthy",
-                        "error": str(e),
-                        "timestamp": datetime.utcnow().isoformat(),
-                    }
-                ),
-                503,
-            )
+            app.logger.debug(f"Could not get system info: {e}")
+            cpu_percent = None
+            memory = None
+
+        return (
+            jsonify(
+                {
+                    "name": "FinViz Pro API",
+                    "version": "1.0.0",
+                    "description": "Finance Analytics Dashboard Backend API",
+                    "environment": app.config["FLASK_ENV"],
+                    "debug": app.debug,
+                    "server_time": datetime.utcnow().isoformat(),
+                    "uptime_seconds": uptime,
+                    "system_info": {
+                        "python_version": platform.python_version(),
+                        "platform": platform.platform(),
+                        "hostname": platform.node(),
+                        "cpu_percent": cpu_percent,
+                        "memory_percent": memory.percent if memory else None,
+                    },
+                    "endpoints": {
+                        "health": {
+                            "basic": "/health",
+                            "detailed": "/health/detailed",
+                            "ping": "/health/ping",
+                            "version": "/health/version",
+                            "db": "/health/db",
+                            "cache": "/health/cache",
+                            "system": "/health/system",
+                            "ready": "/health/ready",
+                            "live": "/health/live",
+                            "metrics": "/health/metrics",
+                        },
+                        "api": {
+                            "docs": "/api/docs",
+                            "auth": "/api/auth/*",
+                            "users": "/api/users/*",
+                            "categories": "/api/categories/*",
+                            "transactions": "/api/transactions/*",
+                            "budgets": "/api/budgets/*",
+                            "analytics": "/api/analytics/*",
+                            "dashboard": "/api/dashboard/*",
+                            "reports": "/api/reports/*",
+                            "exports": "/api/exports/*",
+                            "imports": "/api/imports/*",
+                            "admin": "/api/admin/*",
+                        },
+                        "webhooks": {
+                            "plaid": "/webhooks/plaid",
+                            "stripe": "/webhooks/stripe",
+                            "github": "/webhooks/github",
+                            "sendgrid": "/webhooks/sendgrid",
+                            "generic": "/webhooks/generic",
+                        },
+                    },
+                    "links": {
+                        "documentation": "/api/docs",
+                        "health_check": "/health",
+                        "detailed_health": "/health/detailed",
+                    },
+                }
+            ),
+            HTTP_STATUS.OK,
+        )

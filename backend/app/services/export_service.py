@@ -17,7 +17,7 @@ class ExportService:
     """Service for data export operations."""
 
     @staticmethod
-    def to_csv(data: List[Dict], filename: str = None) -> io.BytesIO:
+    def export_to_csv(data: List[Dict], filename: str = None) -> io.BytesIO:
         """
         Export data to CSV.
 
@@ -42,7 +42,7 @@ class ExportService:
         return io.BytesIO(output.getvalue().encode("utf-8"))
 
     @staticmethod
-    def to_json(data: List[Dict], pretty: bool = True) -> io.BytesIO:
+    def export_to_json(data: List[Dict], pretty: bool = True) -> io.BytesIO:
         """
         Export data to JSON.
 
@@ -58,7 +58,7 @@ class ExportService:
         return io.BytesIO(json_str.encode("utf-8"))
 
     @staticmethod
-    def to_excel(data: List[Dict], sheet: str = "Sheet1") -> io.BytesIO:
+    def export_to_excel(data: List[Dict], sheet: str = "Sheet1") -> io.BytesIO:
         """
         Export data to Excel.
 
@@ -84,7 +84,7 @@ class ExportService:
     @staticmethod
     def to_pdf(data: List[Dict], title: str = "Report") -> io.BytesIO:
         """
-        Simple PDF export (placeholder).
+        Simple PDF export.
 
         Args:
             data: Data to export
@@ -94,8 +94,6 @@ class ExportService:
             BytesIO with PDF
         """
         # Simplified - in production, use reportlab or weasyprint
-        import json
-
         content = json.dumps(
             {
                 "title": title,
@@ -120,12 +118,13 @@ class ExportService:
         Returns:
             BytesIO with exported file
         """
+
         if format == ExportFormat.CSV:
-            return ExportService.to_csv(transactions)
+            return ExportService.export_to_csv(transactions)
         elif format == ExportFormat.JSON:
-            return ExportService.to_json(transactions)
+            return ExportService.export_to_json(transactions)
         elif format == ExportFormat.EXCEL:
-            return ExportService.to_excel(transactions)
+            return ExportService.export_to_excel(transactions)
         elif format == ExportFormat.PDF:
             return ExportService.to_pdf(transactions)
         else:

@@ -76,7 +76,7 @@ class BudgetCreateSchema(Schema):
     year = fields.Integer(required=True, validate=validate.Range(min=2000, max=2100))
     alert_threshold = fields.Float(
         validate=validate.Range(min=0, max=100),
-        load_default=80.0,  # ✅ OK - not required
+        load_default=80.0,
     )
     is_active = fields.Boolean(load_default=True)
     rollover = fields.Boolean(load_default=False)

@@ -39,8 +39,8 @@ class TransactionSchema(SQLAlchemyAutoSchema):
         validate=validate.OneOf(["daily", "weekly", "monthly", "yearly"]),
     )
     recurring_end_date = fields.Date(allow_none=True, format="%Y-%m-%d")
-    created_at = fields.DateTime(dump_only=True, format="%Y-%m-%d %H:%M:%S")
-    updated_at = fields.DateTime(dump_only=True, format="%Y-%m-%d %H:%M:%S")
+    created_at = fields.DateTime(dump_only=True, format="iso8601")
+    updated_at = fields.DateTime(dump_only=True, format="iso8601")
 
     # Computed fields
     formatted_amount = fields.String(dump_only=True)

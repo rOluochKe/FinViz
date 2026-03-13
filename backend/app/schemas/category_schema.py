@@ -55,7 +55,7 @@ class CategoryCreateSchema(Schema):
     type = fields.String(required=True, validate=validate.OneOf(CategoryType.choices()))
     color = fields.String(
         validate=validate.Length(min=4, max=7),
-        load_default="#808080",  # ✅ Changed from missing="#808080"
+        load_default="#808080",
     )
     icon = fields.String(allow_none=True, validate=validate.Length(max=50))
     description = fields.String(allow_none=True, validate=validate.Length(max=200))

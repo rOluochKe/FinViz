@@ -7,16 +7,17 @@ from functools import wraps
 from flask import current_app, jsonify
 from flask_jwt_extended import get_jwt, get_jwt_identity, verify_jwt_in_request
 
+from app.extensions import db
 from app.models.user import User
 from app.utils.constants import HTTP_STATUS
 
 
-def setup_jwt_callbacks(app, jwt):  # ✅ Added jwt parameter
+def setup_jwt_callbacks(app, jwt):
     """Setup JWT callback functions."""
     print(f"🔧 Inside setup_jwt_callbacks")
     print(f"   jwt manager provided: {jwt is not None}")
 
-    @jwt.user_identity_loader  # ✅ Use jwt parameter instead of app.jwt
+    @jwt.user_identity_loader
     def user_identity_lookup(user):
         """Convert user ID to JWT identity."""
         if isinstance(user, User):
@@ -28,7 +29,7 @@ def setup_jwt_callbacks(app, jwt):  # ✅ Added jwt parameter
         """Load user from JWT identity."""
         identity = jwt_data["sub"]
         try:
-            return User.query.get(int(identity))
+            return db.session.get(User, int(identity))
         except (ValueError, TypeError):
             return None
 
@@ -188,10 +189,9 @@ def get_current_user():
     try:
         user_id = get_jwt_identity()
         if user_id:
-            return User.query.get(int(user_id))
+            return db.session.get(User, int(user_id))
     except (ValueError, TypeError):
         pass
-
     return None
 
 

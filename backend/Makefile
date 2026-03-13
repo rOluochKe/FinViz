@@ -150,47 +150,60 @@ format:
 
 # Testing
 test:
-	@echo "$(GREEN)🧪 Running tests...$(RESET)"
+	@echo "$(GREEN)🧪 Running all tests...$(RESET)"
 	pytest -v
+
+test-file:
+	@echo "$(GREEN)🧪 Running tests for $(FILE)...$(RESET)"
+	pytest $(FILE) -v
 
 test-cov:
 	@echo "$(GREEN)📊 Running tests with coverage...$(RESET)"
 	pytest --cov=app --cov-report=term --cov-report=html
 	@echo "$(GREEN)✅ Coverage report generated: open htmlcov/index.html$(RESET)"
 
+test-cov-file:
+	@echo "$(GREEN)📊 Running coverage for $(FILE)...$(RESET)"
+	pytest $(FILE) --cov=app --cov-report=term
+
+test-match:
+	@echo "$(GREEN)🧪 Running tests matching '$(PATTERN)'...$(RESET)"
+	pytest -k $(PATTERN) -v 
+
 test-watch:
 	@echo "$(GREEN)👀 Running tests in watch mode...$(RESET)"
 	ptw -- --cov=app --cov-report=term
 
 # Docker
+# Docker
 docker-up:
 	@echo "$(GREEN)🐳 Starting Docker services...$(RESET)"
-	docker-compose -f docker/docker-compose.yml up -d
+	docker compose -f docker/docker-compose.yml up -d
 	@echo "$(GREEN)✅ Services started!$(RESET)"
 	@echo "$(GREEN)   App: http://localhost:5000$(RESET)"
 	@echo "$(GREEN)   Health: http://localhost:5000/health$(RESET)"
 
 docker-down:
 	@echo "$(GREEN)🐳 Stopping Docker services...$(RESET)"
-	docker-compose -f docker/docker-compose.yml down
+	docker compose -f docker/docker-compose.yml down
 	@echo "$(GREEN)✅ Services stopped!$(RESET)"
 
 docker-logs:
 	@echo "$(GREEN)📋 Showing Docker logs (Ctrl+C to exit)...$(RESET)"
-	docker-compose -f docker/docker-compose.yml logs -f
+	docker compose -f docker/docker-compose.yml logs -f
 
 docker-build:
 	@echo "$(GREEN)🏗️  Rebuilding Docker images...$(RESET)"
-	docker-compose -f docker/docker-compose.yml build --no-cache
+	docker compose -f docker/docker-compose.yml build --no-cache
 	@echo "$(GREEN)✅ Build complete!$(RESET)"
 
 docker-shell:
 	@echo "$(GREEN)🐚 Opening shell in app container...$(RESET)"
-	docker-compose -f docker/docker-compose.yml exec app /bin/bash
+	docker compose -f docker/docker-compose.yml exec app /bin/bash
 
 docker-clean:
 	@echo "$(GREEN)🧹 Cleaning Docker resources...$(RESET)"
-	docker-compose -f docker/docker-compose.yml down -v
+	docker compose -f docker/docker-compose.yml down -v
 	docker system prune -f
 	@echo "$(GREEN)✅ Docker cleanup complete!$(RESET)"
 

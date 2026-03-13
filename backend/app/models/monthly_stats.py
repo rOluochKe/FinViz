@@ -4,7 +4,7 @@ Monthly statistics model for pre-aggregated data.
 
 from datetime import date, datetime
 
-from sqlalchemy import CheckConstraint, Index, func
+from sqlalchemy import CheckConstraint, Index, func, text
 from sqlalchemy.dialects.postgresql import JSONB
 
 from app.extensions import db
@@ -128,9 +128,9 @@ class MonthlyStat(db.Model):
             Transaction.date < end_date,
         ).all()
 
-        # Calculate totals
-        total_income = sum(t.amount for t in transactions if t.is_income)
-        total_expense = sum(t.amount for t in transactions if t.is_expense)
+        # Calculate totals - convert to float
+        total_income = sum(float(t.amount) for t in transactions if t.is_income)
+        total_expense = sum(float(t.amount) for t in transactions if t.is_expense)
         net_savings = total_income - total_expense
         transaction_count = len(transactions)
         avg_transaction = (
@@ -140,24 +140,24 @@ class MonthlyStat(db.Model):
         )
 
         # Category breakdown
-        category_query = (
-            db.session.query(
-                Category.name,
-                Category.color,
-                func.coalesce(func.sum(Transaction.amount), 0).label("total"),
-                func.count().label("count"),
-            )
-            .join(Transaction, Transaction.category_id == Category.id)
-            .filter(
-                Transaction.user_id == user_id,
-                Transaction.date >= start_date,
-                Transaction.date < end_date,
-                Transaction.type == "expense",
-            )
-            .group_by(Category.id, Category.name, Category.color)
-            .order_by(func.sum(Transaction.amount).desc())
-            .all()
-        )
+        category_query = db.session.execute(
+            text("""
+                SELECT 
+                    c.name,
+                    c.color,
+                    COALESCE(SUM(t.amount), 0) as total,
+                    COUNT(t.id) as count
+                FROM transactions t
+                JOIN categories c ON t.category_id = c.id
+                WHERE t.user_id = :user_id
+                    AND t.date >= :start_date
+                    AND t.date < :end_date
+                    AND t.type = 'expense'
+                GROUP BY c.id, c.name, c.color
+                ORDER BY total DESC
+            """),
+            {"user_id": user_id, "start_date": start_date, "end_date": end_date},
+        ).fetchall()
 
         category_breakdown = [
             {
@@ -175,25 +175,29 @@ class MonthlyStat(db.Model):
         top_categories = category_breakdown[:5] if category_breakdown else []
 
         # Best and worst days
-        daily_totals = (
-            db.session.query(
-                Transaction.date, func.sum(Transaction.amount).label("daily_total")
-            )
-            .filter(
-                Transaction.user_id == user_id,
-                Transaction.date >= start_date,
-                Transaction.date < end_date,
-                Transaction.type == "expense",
-            )
-            .group_by(Transaction.date)
-            .all()
-        )
+        daily_totals = db.session.execute(
+            text("""
+                SELECT 
+                    date,
+                    SUM(amount) as daily_total
+                FROM transactions
+                WHERE user_id = :user_id
+                    AND date >= :start_date
+                    AND date < :end_date
+                    AND type = 'expense'
+                GROUP BY date
+            """),
+            {"user_id": user_id, "start_date": start_date, "end_date": end_date},
+        ).fetchall()
 
         best_day = None
         worst_day = None
         if daily_totals:
-            best_day = min(daily_totals, key=lambda x: x.daily_total).date
-            worst_day = max(daily_totals, key=lambda x: x.daily_total).date
+            # Convert to list of tuples for min/max operations
+            daily_list = [(d.date, float(d.daily_total)) for d in daily_totals]
+            if daily_list:
+                best_day = min(daily_list, key=lambda x: x[1])[0]
+                worst_day = max(daily_list, key=lambda x: x[1])[0]
 
         # Create or update stats
         stats = cls.query.filter_by(user_id=user_id, year=year, month=month).first()

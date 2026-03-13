@@ -142,7 +142,7 @@ def create_transactions(user, count):
         category = random.choice(categories)
         
         # Check type as string (not enum)
-        if category.type == 'income':  # ✅ Fixed
+        if category.type == 'income':
             amount = random.uniform(500, 5000)
         else:  # expense or transfer
             amount = random.uniform(5, 500)

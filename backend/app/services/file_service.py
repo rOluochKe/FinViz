@@ -15,6 +15,16 @@ class FileService:
     """Service for local file operations."""
 
     ALLOWED_EXT = {"png", "jpg", "jpeg", "gif", "pdf", "csv", "xlsx", "txt"}
+    ALLOWED_MIMETYPES = {
+        "image/png",
+        "image/jpeg",
+        "image/gif",
+        "application/pdf",
+        "text/csv",
+        "application/vnd.ms-excel",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "text/plain",
+    }
 
     def __init__(self):
         self.base = Path(current_app.config.get("UPLOAD_FOLDER", "uploads"))
@@ -35,6 +45,11 @@ class FileService:
             "." in filename
             and filename.rsplit(".", 1)[1].lower() in FileService.ALLOWED_EXT
         )
+
+    @staticmethod
+    def allowed_mimetype(mimetype: str) -> bool:
+        """Check if mimetype is allowed."""
+        return mimetype in FileService.ALLOWED_MIMETYPES
 
     def save_receipt(self, file: BinaryIO, filename: str, user_id: int) -> Dict:
         """
@@ -105,6 +120,16 @@ class FileService:
             "size": path.stat().st_size,
             "url": f"/uploads/{path.relative_to(self.base)}",
         }
+
+    def get_export_path(self, filename, user_id):
+        """
+        Returns the full path to the export file for the given user and filename.
+        """
+        export_dir = Path("exports") / str(user_id)
+        file_path = export_dir / filename
+        if file_path.exists():
+            return file_path
+        return None
 
     def save_temp(self, file: BinaryIO, filename: str) -> Dict:
         """Save temporary file."""

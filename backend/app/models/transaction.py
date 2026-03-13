@@ -4,7 +4,7 @@ Transaction model for financial transactions.
 
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, Index, text
+from sqlalchemy import CheckConstraint, Index, func, text
 from sqlalchemy.dialects.postgresql import JSONB
 
 from app.extensions import db
@@ -170,7 +170,6 @@ class Transaction(db.Model):
         Returns:
             dict: Monthly summary
         """
-        from sqlalchemy import func
 
         start_date = datetime(year, month, 1).date()
         if month == 12:

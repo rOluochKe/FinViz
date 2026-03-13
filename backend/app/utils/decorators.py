@@ -14,37 +14,34 @@ from app.extensions import limiter
 from app.utils.constants import HTTP_STATUS
 
 
-def admin_required():
+def admin_required(f: Callable) -> Callable:
     """
-    Decorator factory for admin required.
+    Decorator to require admin role.
+
+    Args:
+        f: Function to wrap
 
     Returns:
-        Decorator function
+        Wrapped function that requires admin access
     """
 
-    def decorator(f):
-        @wraps(f)
-        def decorated_function(*args, **kwargs):
-            verify_jwt_in_request()
-            claims = get_jwt()
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        verify_jwt_in_request()
+        claims = get_jwt()
+        if not claims.get("is_admin", False):
+            return (
+                jsonify(
+                    {
+                        "error": "Admin access required",
+                        "message": "This endpoint requires administrator privileges",
+                    }
+                ),
+                HTTP_STATUS.FORBIDDEN,
+            )
+        return f(*args, **kwargs)
 
-            if not claims.get("is_admin", False):
-                return (
-                    jsonify(
-                        {
-                            "error": "admin_required",
-                            "message": "Admin access required",
-                            "status_code": HTTP_STATUS.FORBIDDEN,
-                        }
-                    ),
-                    HTTP_STATUS.FORBIDDEN,
-                )
-
-            return f(*args, **kwargs)
-
-        return decorated_function
-
-    return decorator
+    return decorated_function
 
 
 def validate_request(schema_class):
@@ -284,36 +281,6 @@ def handle_errors(f: Callable) -> Callable:
                 ),
                 HTTP_STATUS.INTERNAL_SERVER_ERROR,
             )
-
-    return decorated_function
-
-
-def admin_required(f: Callable) -> Callable:
-    """
-    Decorator to require admin role.
-
-    Args:
-        f: Function to wrap
-
-    Returns:
-        Wrapped function that requires admin access
-    """
-
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        verify_jwt_in_request()
-        claims = get_jwt()
-        if not claims.get("is_admin", False):
-            return (
-                jsonify(
-                    {
-                        "error": "Admin access required",
-                        "message": "This endpoint requires administrator privileges",
-                    }
-                ),
-                HTTP_STATUS.FORBIDDEN,
-            )
-        return f(*args, **kwargs)
 
     return decorated_function
 

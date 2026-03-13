@@ -3,10 +3,9 @@ name = "finviz-pro-backend"
 version = "1.0.0"
 description = "Finance Analytics Dashboard Backend API"
 authors = [
-    { name = "Raymond Oluoch", email = "your.email@example.com" }
+    { name = "Raymond Oluoch" }
 ]
 license = { text = "MIT" }
-readme = "README.md"
 requires-python = ">=3.11"
 
 dependencies = [
@@ -41,6 +40,9 @@ dependencies = [
     "phonenumbers>=9.0.25",
     "psutil>=7.2.2",
     "scikit-learn>=1.8.0",
+    "flask-restx>=1.3.2",
+    "openpyxl>=3.1.5",
+    "pytest-mock>=3.15.1",
 ]
 
 [project.optional-dependencies]

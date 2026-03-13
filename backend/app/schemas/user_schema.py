@@ -41,7 +41,7 @@ class UserSchema(SQLAlchemyAutoSchema):
     last_name = fields.String(allow_none=True, validate=validate.Length(max=50))
     role = fields.String(dump_only=True)
     status = fields.String(dump_only=True)
-    preferences = fields.Dict(dump_only=True)
+    preferences = fields.Dict()
     email_verified = fields.Boolean(dump_only=True)
     created_at = fields.DateTime(dump_only=True, format="%Y-%m-%d %H:%M:%S")
     last_login = fields.DateTime(dump_only=True, format="%Y-%m-%d %H:%M:%S")
