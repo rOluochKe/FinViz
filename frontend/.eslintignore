@@ -1,0 +1,10 @@
+node_modules
+build
+dist
+coverage
+*.config.js
+*.config.ts
+.env
+.env.local
+.env.*.local
+public
