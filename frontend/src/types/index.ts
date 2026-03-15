@@ -230,6 +230,7 @@ export interface Budget {
   spent_percentage: number;
   is_over_budget: boolean;
   should_alert: boolean;
+  alert_threshold?: number;
   is_active: boolean;
   notes?: string | null;
   created_at: string;
@@ -254,7 +255,7 @@ export interface BudgetUpdate {
   notes?: string | null;
 }
 
-export interface BudgetStatus {
+export interface BudgetStatusType {
   budget_id: number;
   category_id: number;
   category_name: string;
@@ -333,7 +334,7 @@ export interface DashboardData {
   spending_by_category: CategorySpending[];
   trends: TimeSeriesData[];
   insights: DashboardInsight[];
-  budget_status?: BudgetStatus[];
+  budget_status?: BudgetStatusType[];
 }
 
 export interface UpcomingTransaction {
