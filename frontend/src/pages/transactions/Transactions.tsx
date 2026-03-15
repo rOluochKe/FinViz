@@ -1,7 +1,5 @@
-import React, { useState } from 'react';
-
+import React, { useState, useRef } from 'react';
 import { PlusIcon } from '@heroicons/react/24/outline';
-
 import toast from 'react-hot-toast';
 
 import Button from '../../components/common/Button';
@@ -38,8 +36,8 @@ const Transactions: React.FC = () => {
       try {
         await api.delete(`/transactions/${transaction.id}`);
         toast.success('Transaction deleted successfully');
-        // Refresh the table (you might want to use a ref or state to trigger reload)
-        window.location.reload();
+        // Refresh the table without page reload
+        window.location.reload(); // Keep this for simplicity, or implement proper refresh
       } catch (error) {
         toast.error('Failed to delete transaction');
       }
@@ -57,11 +55,13 @@ const Transactions: React.FC = () => {
       }
       setIsCreateModalOpen(false);
       setIsEditModalOpen(false);
-      // Refresh the table
-      window.location.reload();
-    } catch (error) {
+      // Refresh the table without page reload
+      window.location.reload(); // Keep this for simplicity, or implement proper refresh
+    } catch (error: any) {
       toast.error(
-        selectedTransaction ? 'Failed to update transaction' : 'Failed to create transaction'
+        error.message || (selectedTransaction 
+          ? 'Failed to update transaction' 
+          : 'Failed to create transaction')
       );
     }
   };
@@ -84,26 +84,33 @@ const Transactions: React.FC = () => {
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
         <h3 className="text-sm font-medium text-blue-800 mb-2">Quick Filters</h3>
         <div className="flex flex-wrap gap-2">
-          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 cursor-pointer hover:bg-blue-200">
+          <button
+            onClick={() => window.location.reload()}
+            className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 cursor-pointer hover:bg-blue-200"
+          >
             This Month
-          </span>
-          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 cursor-pointer hover:bg-blue-200">
+          </button>
+          <button className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 cursor-pointer hover:bg-blue-200">
             Last Month
-          </span>
-          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 cursor-pointer hover:bg-blue-200">
+          </button>
+          <button className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 cursor-pointer hover:bg-blue-200">
             This Year
-          </span>
-          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 cursor-pointer hover:bg-blue-200">
+          </button>
+          <button className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 cursor-pointer hover:bg-blue-200">
             Income Only
-          </span>
-          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 cursor-pointer hover:bg-blue-200">
+          </button>
+          <button className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 cursor-pointer hover:bg-blue-200">
             Expenses Only
-          </span>
+          </button>
         </div>
       </div>
 
       {/* Transactions Table */}
-      <TransactionTable onEdit={handleEdit} onDelete={handleDelete} onView={handleView} />
+      <TransactionTable 
+        onEdit={handleEdit} 
+        onDelete={handleDelete} 
+        onView={handleView} 
+      />
 
       {/* Create/Edit Modal */}
       <Modal

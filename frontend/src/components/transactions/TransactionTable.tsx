@@ -1,7 +1,5 @@
-import React, { useEffect, useState } from 'react';
-
+import React, { useEffect, useState, useCallback } from 'react';
 import { EyeIcon, PencilIcon, TrashIcon } from '@heroicons/react/24/outline';
-
 import { format } from 'date-fns';
 import DataTable from 'react-data-table-component';
 import toast from 'react-hot-toast';
@@ -52,12 +50,14 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ onEdit, onDelete, o
   };
 
   // Load transactions
-  const loadTransactions = async () => {
+  const loadTransactions = useCallback(async () => {
     setLoading(true);
     try {
       const params: TransactionFilter = {
         page,
         per_page: perPage,
+        sort_by: sortColumn,
+        sort_dir: sortDirection,
         ...filters,
       };
 
@@ -70,11 +70,11 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ onEdit, onDelete, o
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, perPage, sortColumn, sortDirection, filters]);
 
   useEffect(() => {
     loadTransactions();
-  }, [page, perPage, sortColumn, sortDirection, filters]);
+  }, [loadTransactions]);
 
   // Handle page change
   const handlePageChange = (newPage: number) => {
@@ -119,6 +119,12 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ onEdit, onDelete, o
     window.open(
       `/api/transactions/export?format=${format}&ids=${selectedRows.map((r) => r.id).join(',')}`
     );
+  };
+
+  // Handle filter change
+  const handleFilterChange = (key: keyof TransactionFilter, value: any) => {
+    setFilters(prev => ({ ...prev, [key]: value }));
+    setPage(1); // Reset to first page when filter changes
   };
 
   // Column definitions
@@ -211,7 +217,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ onEdit, onDelete, o
           {onView && (
             <button
               onClick={() => onView(row)}
-              className="text-blue-600 hover:text-blue-800"
+              className="text-blue-600 hover:text-blue-800 transition-colors"
               title="View"
             >
               <EyeIcon className="h-5 w-5" />
@@ -220,7 +226,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ onEdit, onDelete, o
           {onEdit && (
             <button
               onClick={() => onEdit(row)}
-              className="text-indigo-600 hover:text-indigo-800"
+              className="text-indigo-600 hover:text-indigo-800 transition-colors"
               title="Edit"
             >
               <PencilIcon className="h-5 w-5" />
@@ -229,7 +235,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ onEdit, onDelete, o
           {onDelete && (
             <button
               onClick={() => onDelete(row)}
-              className="text-red-600 hover:text-red-800"
+              className="text-red-600 hover:text-red-800 transition-colors"
               title="Delete"
             >
               <TrashIcon className="h-5 w-5" />
@@ -304,7 +310,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ onEdit, onDelete, o
         <div className="flex space-x-2">
           <select
             className="input-field text-sm py-1"
-            onChange={(e) => setFilters({ ...filters, type: e.target.value as any })}
+            onChange={(e) => handleFilterChange('type', e.target.value)}
             value={filters.type || ''}
           >
             <option value="">All Types</option>
@@ -316,14 +322,14 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ onEdit, onDelete, o
           <input
             type="date"
             className="input-field text-sm py-1"
-            onChange={(e) => setFilters({ ...filters, start_date: e.target.value })}
+            onChange={(e) => handleFilterChange('start_date', e.target.value)}
             value={filters.start_date || ''}
           />
 
           <input
             type="date"
             className="input-field text-sm py-1"
-            onChange={(e) => setFilters({ ...filters, end_date: e.target.value })}
+            onChange={(e) => handleFilterChange('end_date', e.target.value)}
             value={filters.end_date || ''}
           />
 
@@ -331,7 +337,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ onEdit, onDelete, o
             type="text"
             placeholder="Search..."
             className="input-field text-sm py-1"
-            onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+            onChange={(e) => handleFilterChange('search', e.target.value)}
             value={filters.search || ''}
           />
         </div>

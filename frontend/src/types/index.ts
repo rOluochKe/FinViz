@@ -150,6 +150,8 @@ export interface TransactionFilter {
   search?: string;
   min_amount?: number;
   max_amount?: number;
+  sort_by?: string;
+  sort_dir?: 'asc' | 'desc';
 }
 
 export interface PaginatedResponse<T> {
