@@ -1,5 +1,7 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
+
 import { EyeIcon, PencilIcon, TrashIcon } from '@heroicons/react/24/outline';
+
 import { format } from 'date-fns';
 import DataTable from 'react-data-table-component';
 import toast from 'react-hot-toast';
@@ -123,7 +125,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ onEdit, onDelete, o
 
   // Handle filter change
   const handleFilterChange = (key: keyof TransactionFilter, value: any) => {
-    setFilters(prev => ({ ...prev, [key]: value }));
+    setFilters((prev) => ({ ...prev, [key]: value }));
     setPage(1); // Reset to first page when filter changes
   };
 

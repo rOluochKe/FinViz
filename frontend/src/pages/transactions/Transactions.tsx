@@ -1,5 +1,7 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
+
 import { PlusIcon } from '@heroicons/react/24/outline';
+
 import toast from 'react-hot-toast';
 
 import Button from '../../components/common/Button';
@@ -59,9 +61,8 @@ const Transactions: React.FC = () => {
       window.location.reload(); // Keep this for simplicity, or implement proper refresh
     } catch (error: any) {
       toast.error(
-        error.message || (selectedTransaction 
-          ? 'Failed to update transaction' 
-          : 'Failed to create transaction')
+        error.message ||
+          (selectedTransaction ? 'Failed to update transaction' : 'Failed to create transaction')
       );
     }
   };
@@ -106,11 +107,7 @@ const Transactions: React.FC = () => {
       </div>
 
       {/* Transactions Table */}
-      <TransactionTable 
-        onEdit={handleEdit} 
-        onDelete={handleDelete} 
-        onView={handleView} 
-      />
+      <TransactionTable onEdit={handleEdit} onDelete={handleDelete} onView={handleView} />
 
       {/* Create/Edit Modal */}
       <Modal
