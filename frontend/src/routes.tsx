@@ -15,13 +15,13 @@ import Categories from './pages/categories/Categories';
 // Protected pages
 import Dashboard from './pages/dashboard/Dashboard';
 import About from './pages/public/About';
+import Contact from './pages/public/Contact';
 // Public pages
 import Home from './pages/public/Home';
 import Reports from './pages/reports/Reports';
 import Settings from './pages/settings/Settings';
+import Transactions from './pages/transactions/Transactions';
 import Trends from './pages/trends/Trends';
-
-// import Transactions from './pages/transactions/Transactions';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -39,6 +39,7 @@ const AppRoutes: React.FC = () => {
         {/* Public routes */}
         <Route path="/" element={<Home />} />
         <Route path="/about" element={<About />} />
+        <Route path="/contact" element={<Contact />} />
 
         {/* Auth routes */}
         <Route path="/login" element={<Login />} />
@@ -55,14 +56,14 @@ const AppRoutes: React.FC = () => {
             </ProtectedRoute>
           }
         />
-        {/* <Route
+        <Route
           path="/transactions"
           element={
             <ProtectedRoute>
               <Transactions />
             </ProtectedRoute>
           }
-        /> */}
+        />
         <Route
           path="/categories"
           element={

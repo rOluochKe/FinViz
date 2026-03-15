@@ -169,14 +169,19 @@ class ApiService {
 
   // Auth methods
   public async login(credentials: { username: string; password: string }): Promise<any> {
-    const response = await this.api.post('/auth/login', credentials);
-    if (response.data.tokens) {
-      this.setTokens(response.data.tokens);
-      if (response.data.user) {
-        localStorage.setItem('user', JSON.stringify(response.data.user));
+    try {
+      const response = await this.api.post('/auth/login', credentials);
+
+      if (response.data.tokens) {
+        this.setTokens(response.data.tokens);
+        if (response.data.user) {
+          localStorage.setItem('user', JSON.stringify(response.data.user));
+        }
       }
+      return response.data;
+    } catch (error) {
+      throw error;
     }
-    return response.data;
   }
 
   public async register(userData: any): Promise<any> {

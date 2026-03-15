@@ -49,8 +49,23 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const login = async (credentials: LoginCredentials) => {
     setIsLoading(true);
     try {
-      const response = await api.login(credentials);
-      setUser(response.user);
+      // Step 1: Login and get tokens
+      await api.login(credentials);
+
+      // Step 2: Immediately fetch the current user using the tokens
+      const userResponse = await api.getCurrentUser();
+
+      // Step 3: Set the user state
+      if (userResponse && userResponse.user) {
+        setUser(userResponse.user);
+      } else {
+        // Fallback: try to get user from localStorage
+        const storedUser = api.getUser();
+        if (storedUser) {
+          setUser(storedUser);
+        }
+      }
+
       toast.success('Login successful!');
     } catch (error: any) {
       toast.error(error.message || 'Login failed');
@@ -89,7 +104,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const updateUser = (userData: Partial<User>) => {
     if (user) {
-      setUser({ ...user, ...userData });
+      const updatedUser = { ...user, ...userData };
+      setUser(updatedUser);
+      localStorage.setItem('user', JSON.stringify(updatedUser));
     }
   };
 

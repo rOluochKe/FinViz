@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 
 import { useNavigate } from 'react-router-dom';
 
@@ -9,11 +9,20 @@ import { LoginCredentials } from '../../types';
 
 const Login: React.FC = () => {
   const navigate = useNavigate();
-  const { login, isLoading } = useAuth();
+  const { login, isLoading, isAuthenticated } = useAuth();
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [isAuthenticated, navigate]);
 
   const handleSubmit = async (data: LoginCredentials) => {
-    await login(data);
-    navigate('/dashboard');
+    try {
+      await login(data);
+    } catch (error) {
+      console.error('Login: Login failed:', error);
+    }
   };
 
   return (
