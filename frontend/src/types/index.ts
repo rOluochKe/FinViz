@@ -689,3 +689,240 @@ export interface TableFilter {
   value: any;
   operator?: 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte' | 'contains' | 'startsWith' | 'endsWith';
 }
+
+// ============================================================================
+// Analytics Types
+// ============================================================================
+
+export interface SpendingPatterns {
+  period: {
+    start: string;
+    end: string;
+    months: number;
+  };
+  summary: {
+    total_spending: number;
+    transaction_count: number;
+    avg_transaction: number;
+    median_transaction: number;
+    avg_monthly_spending: number;
+  };
+  by_day: Array<{
+    day_name: string;
+    sum: number;
+    mean: number;
+    count: number;
+  }>;
+  by_category: Array<{
+    category: string;
+    sum: number;
+    count: number;
+  }>;
+  monthly_trend: {
+    growth: number;
+    is_increasing: boolean;
+    weekly: Array<{ week: string; amount: number }>;
+    monthly: Array<{ period: string; amount: number }>;
+  };
+  seasonal: Array<{
+    month: number;
+    month_name: string;
+    avg_spending: number;
+    total_spending: number;
+    transaction_count: number;
+  }>;
+  concentration: {
+    hhi_score: number;
+    level: 'low' | 'medium' | 'high';
+    top_categories: Record<string, number>;
+  };
+}
+
+export interface Anomaly {
+  transaction_id?: number;
+  date: string;
+  amount: number;
+  desc?: string;
+  description?: string;
+  category?: string | null;
+  z_score: number;
+  type?: string;
+  reason?: string;
+}
+
+export interface ForecastData {
+  method: string;
+  historical_period: {
+    start: string;
+    end: string;
+    months: number;
+  };
+  forecast_periods: Array<{
+    year: number;
+    month: number;
+    period: string;
+    forecast_income: number;
+    forecast_expense: number;
+    forecast_net: number;
+    confidence_lower?: number;
+    confidence_upper?: number;
+  }>;
+  confidence: {
+    score: number;
+    income_interval: number;
+    expense_interval: number;
+    interpretation: 'High' | 'Medium' | 'Low';
+  };
+  statistics: {
+    historical_avg_income: number;
+    historical_avg_expense: number;
+    historical_trend_income: number;
+    historical_trend_expense: number;
+  };
+}
+
+export interface CategoryInsight {
+  category_id: number;
+  category: string;
+  color: string;
+  total: number;
+  avg: number;
+  max: number;
+  min: number;
+  count: number;
+  frequency: string;
+}
+
+export interface MonthlyReport {
+  period: string;
+  summary: {
+    income: number;
+    expense: number;
+    savings: number;
+    rate: number;
+    count: number;
+  };
+  categories: Array<{
+    name: string;
+    amount: number;
+    count: number;
+    color: string;
+  }>;
+  daily: Array<{
+    day: number;
+    amount: number;
+  }>;
+  budgets: Array<{
+    category: string;
+    budget: number;
+    spent: number;
+    remaining: number;
+    percent: number;
+  }>;
+}
+
+export interface YearlyReport {
+  year: number;
+  summary: {
+    income: number;
+    expense: number;
+    savings: number;
+    rate: number;
+    count: number;
+  };
+  monthly: Array<{
+    month: number;
+    name: string;
+    income: number;
+    expense: number;
+    savings: number;
+  }>;
+  top_categories: Array<{
+    name: string;
+    color: string;
+    amount: number;
+  }>;
+  best_month?: {
+    month: number;
+    name: string;
+    savings: number;
+  } | null;
+  worst_month?: {
+    month: number;
+    name: string;
+    savings: number;
+  } | null;
+}
+
+export interface CategoryReport {
+  category: {
+    id: number;
+    name: string;
+    color: string;
+    type: string;
+  };
+  period: string;
+  summary: {
+    total: number;
+    avg: number;
+    max: number;
+    min: number;
+    count: number;
+  };
+  monthly: Array<{
+    month: string;
+    amount: number;
+  }>;
+  recent: Transaction[];
+}
+
+export interface CashFlowData {
+  period: {
+    start: string;
+    end: string;
+    days: number;
+  };
+  summary: {
+    total_inflow: number;
+    total_outflow: number;
+    net_cashflow: number;
+    avg_monthly_inflow: number;
+    avg_monthly_outflow: number;
+    avg_monthly_net: number;
+    current_balance: number;
+  };
+  monthly_data: Array<{
+    month: string;
+    inflow: number;
+    outflow: number;
+    net: number;
+    start_balance: number;
+    end_balance: number;
+    savings_rate: number;
+  }>;
+  daily_data: Array<{
+    date: string;
+    inflow: number;
+    outflow: number;
+    balance: number;
+  }>;
+  patterns: Array<{
+    type: 'positive' | 'good' | 'info';
+    description: string;
+    details: string;
+  }>;
+}
+
+export interface TrendDataPoint {
+  period: string;
+  date?: string;
+  income: number;
+  expense: number;
+  net: number;
+  count: number;
+  income_ma3?: number | null;
+  expense_ma3?: number | null;
+  net_ma3?: number | null;
+  income_trend?: string | null;
+  expense_trend?: string | null;
+}
