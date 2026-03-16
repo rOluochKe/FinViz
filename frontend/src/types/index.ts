@@ -970,3 +970,51 @@ export interface ReportFilters {
   type?: 'income' | 'expense' | 'transfer';
   group_by?: 'day' | 'week' | 'month';
 }
+
+// ============================================================================
+// Setting Types
+// ============================================================================
+
+export interface NotificationSettings {
+  email: boolean;
+  push: boolean;
+  budget_alerts: boolean;
+  weekly_summary: boolean;
+  large_transaction_alerts: boolean;
+  marketing_emails: boolean;
+}
+
+export interface SecuritySettings {
+  two_factor_enabled: boolean;
+  session_timeout: number; // in minutes
+  login_notifications: boolean;
+  device_management: boolean;
+  last_password_change?: string;
+}
+
+export interface AppearanceSettings {
+  theme: 'light' | 'dark' | 'system';
+  density: 'comfortable' | 'compact';
+  animations: boolean;
+  reduced_motion: boolean;
+  high_contrast: boolean;
+}
+
+export interface ProfileSettings {
+  first_name?: string;
+  last_name?: string;
+  email: string;
+  phone?: string;
+  avatar_url?: string;
+  timezone: string;
+  date_format: string;
+  currency: string;
+  language: string;
+}
+
+export interface Settings {
+  profile: ProfileSettings;
+  notifications: NotificationSettings;
+  security: SecuritySettings;
+  appearance: AppearanceSettings;
+}
