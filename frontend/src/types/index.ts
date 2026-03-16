@@ -926,3 +926,47 @@ export interface TrendDataPoint {
   income_trend?: string | null;
   expense_trend?: string | null;
 }
+
+// ============================================================================
+// Reports Types
+// ============================================================================
+
+export interface ComparisonReport {
+  period1: MonthlyReport;
+  period2: MonthlyReport;
+  differences: {
+    income: number;
+    expense: number;
+    savings: number;
+    rate: number;
+    count: number;
+  };
+}
+
+export interface YearSummary {
+  summary: {
+    income: number;
+    expense: number;
+    savings: number;
+    rate: number;
+    count: number;
+  };
+  best_month?: {
+    month: number;
+    name: string;
+    savings: number;
+  } | null;
+  worst_month?: {
+    month: number;
+    name: string;
+    savings: number;
+  } | null;
+}
+
+export interface ReportFilters {
+  start_date?: string;
+  end_date?: string;
+  category_id?: number;
+  type?: 'income' | 'expense' | 'transfer';
+  group_by?: 'day' | 'week' | 'month';
+}

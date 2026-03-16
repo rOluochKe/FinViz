@@ -21,7 +21,6 @@ import Home from './pages/public/Home';
 import Reports from './pages/reports/Reports';
 import Settings from './pages/settings/Settings';
 import Transactions from './pages/transactions/Transactions';
-import Trends from './pages/trends/Trends';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -93,14 +92,6 @@ const AppRoutes: React.FC = () => {
           element={
             <ProtectedRoute>
               <Reports />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/trends"
-          element={
-            <ProtectedRoute>
-              <Trends />
             </ProtectedRoute>
           }
         />
