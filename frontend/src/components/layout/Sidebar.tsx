@@ -10,6 +10,7 @@ import {
   CreditCardIcon,
   DocumentTextIcon,
   HomeIcon,
+  ShieldCheckIcon,
   TagIcon,
   UsersIcon,
   XMarkIcon,
@@ -25,6 +26,7 @@ const navigation = [
   { name: 'Analytics', href: '/analytics', icon: ChartPieIcon },
   { name: 'Reports', href: '/reports', icon: DocumentTextIcon },
   { name: 'Users', href: '/users', icon: UsersIcon },
+  { name: 'Admin', href: '/admin', icon: ShieldCheckIcon },
   { name: 'Settings', href: '/settings', icon: Cog6ToothIcon },
 ];
 

@@ -4,6 +4,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 
 import Layout from './components/layout/Layout';
 import { useAuth } from './context/AuthContext';
+import Admin from './pages/admin/Admin';
 import Analytics from './pages/analytics/Analytics';
 import ForgotPassword from './pages/auth/ForgotPassword';
 // Auth pages
@@ -101,6 +102,14 @@ const AppRoutes: React.FC = () => {
           element={
             <ProtectedRoute>
               <Users />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin"
+          element={
+            <ProtectedRoute>
+              <Admin />
             </ProtectedRoute>
           }
         />
