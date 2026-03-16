@@ -11,6 +11,7 @@ import {
   DocumentTextIcon,
   HomeIcon,
   TagIcon,
+  UsersIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline';
 
@@ -23,6 +24,7 @@ const navigation = [
   { name: 'Budgets', href: '/budgets', icon: CalculatorIcon },
   { name: 'Analytics', href: '/analytics', icon: ChartPieIcon },
   { name: 'Reports', href: '/reports', icon: DocumentTextIcon },
+  { name: 'Users', href: '/users', icon: UsersIcon },
   { name: 'Settings', href: '/settings', icon: Cog6ToothIcon },
 ];
 
