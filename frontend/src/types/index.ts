@@ -1018,3 +1018,208 @@ export interface Settings {
   security: SecuritySettings;
   appearance: AppearanceSettings;
 }
+
+// ============================================================================
+// Admin Types
+// ============================================================================
+
+export interface SystemStats {
+  users: number;
+  transactions: number;
+  categories: number;
+  budgets: number;
+}
+
+export interface CacheStats {
+  backend: string;
+  hits?: number;
+  misses?: number;
+  memory?: string;
+  keys?: number;
+}
+
+export interface DiskUsage {
+  total_gb: number;
+  used_gb: number;
+  free_gb: number;
+  percent: number;
+}
+
+export interface StorageStats {
+  disk: DiskUsage;
+  uploads: {
+    total_size_mb: number;
+    total_users: number;
+    users: Array<{
+      user_id: number;
+      usage: {
+        receipts: { count: number; size: number; mb: number };
+        exports: { count: number; size: number; mb: number };
+        total: { count: number; size: number; mb: number };
+      };
+    }>;
+  };
+}
+
+export interface LogEntry {
+  timestamp: string;
+  level: string;
+  message: string;
+}
+
+export interface SystemHealth {
+  status: 'healthy' | 'degraded' | 'unhealthy';
+  timestamp: string;
+  components: {
+    database?: { status: string; error?: string };
+    cache?: { status: string; error?: string };
+    disk?: { status: string; free_gb: number; total_gb: number };
+    memory?: { status: string; percent: number; available_gb: number; total_gb: number };
+  };
+}
+
+export interface EnvInfo {
+  environment: string;
+  debug: boolean;
+  database: string;
+  cache: string;
+}
+
+export interface MigrationResult {
+  message: string;
+  output: string;
+  error?: string;
+}
+
+export interface CleanupResult {
+  message: string;
+  count: number;
+}
+
+// ============================================================================
+// Export Types
+// ============================================================================
+export interface ExportOptions {
+  format: ExportFormat;
+  start_date?: string;
+  end_date?: string;
+  category_id?: number;
+}
+
+export interface ExportFile {
+  filename: string;
+  size: number;
+  size_formatted: string;
+  created_at: string;
+  download_url: string;
+  type: 'transactions' | 'categories' | 'budgets' | 'report';
+}
+
+export interface ExportFilesResponse {
+  files: ExportFile[];
+  total_size: number;
+  total_size_formatted: string;
+  count: number;
+  storage: {
+    used: number;
+    used_formatted: string;
+    limit: number;
+    limit_formatted: string;
+    percent_used: number;
+  };
+}
+
+export interface ExportFormatInfo {
+  format: ExportFormat;
+  name: string;
+  mime_type: string;
+  extension: string;
+  features: string[];
+  max_size_mb: number;
+}
+
+// ============================================================================
+// Imports Types
+// ============================================================================
+
+export type ImportStatus = 'pending' | 'processing' | 'completed' | 'failed';
+
+export interface ImportFile {
+  id: string;
+  filename: string;
+  size: number;
+  size_formatted: string;
+  uploaded_at: string;
+  status: ImportStatus;
+  record_count?: number;
+  error?: string;
+}
+
+export interface ImportPreview {
+  filename: string;
+  total_rows: number;
+  columns: string[];
+  sample: Array<Record<string, any>>;
+  mapping: Record<string, string>;
+  warnings?: string[];
+  errors?: Array<{
+    row: number;
+    column: string;
+    message: string;
+  }>;
+}
+
+export interface ImportMapping {
+  date: string;
+  amount: string;
+  description: string;
+  category?: string;
+  type?: string;
+  notes?: string;
+  tags?: string;
+}
+
+export interface ImportResult {
+  id: string;
+  filename: string;
+  total_rows: number;
+  processed: number;
+  succeeded: number;
+  failed: number;
+  errors?: Array<{
+    row: number;
+    error: string;
+    data?: Record<string, any>;
+  }>;
+  created_at: string;
+  completed_at?: string;
+  status: ImportStatus;
+}
+
+export interface ImportTemplate {
+  format: ExportFormat;
+  headers: string[];
+  sample: Record<string, any>[];
+  description: string;
+  required_fields: string[];
+  optional_fields: string[];
+}
+
+export interface ReportExportRequest {
+  format: ExportFormat;
+  start_date: string;
+  end_date: string;
+  report_type: 'summary' | 'detailed' | 'category' | 'comparison';
+  include_charts?: boolean;
+  group_by?: 'day' | 'week' | 'month';
+}
+
+export interface ExportSectionProps {
+  onExportComplete?: (file: ExportFile) => void;
+  onError?: (error: string) => void;
+}
+
+export interface ImportSectionProps {
+  onImportComplete?: (result: ImportResult) => void;
+  onError?: (error: string) => void;
+}

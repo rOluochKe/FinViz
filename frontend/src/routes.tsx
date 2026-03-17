@@ -15,6 +15,7 @@ import Budgets from './pages/budgets/Budgets';
 import Categories from './pages/categories/Categories';
 // Protected pages
 import Dashboard from './pages/dashboard/Dashboard';
+import ExportsImports from './pages/exports-imports/ExportsImports';
 import About from './pages/public/About';
 import Contact from './pages/public/Contact';
 // Public pages
@@ -94,6 +95,14 @@ const AppRoutes: React.FC = () => {
           element={
             <ProtectedRoute>
               <Reports />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/exports-imports"
+          element={
+            <ProtectedRoute>
+              <ExportsImports />
             </ProtectedRoute>
           }
         />

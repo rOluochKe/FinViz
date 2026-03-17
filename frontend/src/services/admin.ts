@@ -1,77 +1,13 @@
+import {
+  CacheStats,
+  CleanupResult,
+  EnvInfo,
+  MigrationResult,
+  StorageStats,
+  SystemHealth,
+  SystemStats,
+} from '../types';
 import api from './api';
-
-interface SystemStats {
-  users: number;
-  transactions: number;
-  categories: number;
-  budgets: number;
-}
-
-interface CacheStats {
-  backend: string;
-  hits?: number;
-  misses?: number;
-  memory?: string;
-  keys?: number;
-}
-
-interface DiskUsage {
-  total_gb: number;
-  used_gb: number;
-  free_gb: number;
-  percent: number;
-}
-
-interface StorageStats {
-  disk: DiskUsage;
-  uploads: {
-    total_size_mb: number;
-    total_users: number;
-    users: Array<{
-      user_id: number;
-      usage: {
-        receipts: { count: number; size: number; mb: number };
-        exports: { count: number; size: number; mb: number };
-        total: { count: number; size: number; mb: number };
-      };
-    }>;
-  };
-}
-
-// interface LogEntry {
-//   timestamp: string;
-//   level: string;
-//   message: string;
-// }
-
-interface SystemHealth {
-  status: 'healthy' | 'degraded' | 'unhealthy';
-  timestamp: string;
-  components: {
-    database?: { status: string; error?: string };
-    cache?: { status: string; error?: string };
-    disk?: { status: string; free_gb: number; total_gb: number };
-    memory?: { status: string; percent: number; available_gb: number; total_gb: number };
-  };
-}
-
-interface EnvInfo {
-  environment: string;
-  debug: boolean;
-  database: string;
-  cache: string;
-}
-
-interface MigrationResult {
-  message: string;
-  output: string;
-  error?: string;
-}
-
-interface CleanupResult {
-  message: string;
-  count: number;
-}
 
 class AdminService {
   private static instance: AdminService;

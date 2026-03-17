@@ -4,6 +4,7 @@ import { Fragment } from 'react';
 import { Dialog, Transition } from '@headlessui/react';
 
 import {
+  ArrowDownTrayIcon,
   CalculatorIcon,
   ChartPieIcon,
   Cog6ToothIcon,
@@ -25,6 +26,7 @@ const navigation = [
   { name: 'Budgets', href: '/budgets', icon: CalculatorIcon },
   { name: 'Analytics', href: '/analytics', icon: ChartPieIcon },
   { name: 'Reports', href: '/reports', icon: DocumentTextIcon },
+  { name: 'Exports/Imports', href: '/exports-imports', icon: ArrowDownTrayIcon },
   { name: 'Users', href: '/users', icon: UsersIcon },
   { name: 'Admin', href: '/admin', icon: ShieldCheckIcon },
   { name: 'Settings', href: '/settings', icon: Cog6ToothIcon },
