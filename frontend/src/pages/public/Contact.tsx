@@ -3,22 +3,17 @@ import React, { useState } from 'react';
 import {
   AcademicCapIcon,
   ArrowRightIcon,
-  BuildingOfficeIcon,
   ChatBubbleLeftRightIcon,
-  CheckCircleIcon,
   ClockIcon,
   CreditCardIcon,
   DevicePhoneMobileIcon,
   DocumentTextIcon,
   EnvelopeIcon,
-  GlobeAltIcon,
   LifebuoyIcon,
   MapPinIcon,
   PhoneIcon,
   QuestionMarkCircleIcon,
   ShieldCheckIcon,
-  TicketIcon,
-  UserIcon,
 } from '@heroicons/react/24/outline';
 import { CheckCircleIcon as CheckCircleSolid } from '@heroicons/react/24/solid';
 
@@ -436,7 +431,7 @@ const Contact: React.FC = () => {
           </div>
 
           {/* FAQ Section */}
-          <div>
+          <div className="bg-white rounded-2xl shadow-lg p-8">
             <div className="flex items-center mb-6">
               <div className="w-12 h-12 bg-primary-100 rounded-full flex items-center justify-center mr-4">
                 <QuestionMarkCircleIcon className="h-6 w-6 text-primary-600" />
@@ -447,7 +442,7 @@ const Contact: React.FC = () => {
               </div>
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-4 overflow-y-auto pr-2" style={{ maxHeight: '400px' }}>
               {faqs.map((faq, index) => (
                 <div
                   key={index}
@@ -463,41 +458,41 @@ const Contact: React.FC = () => {
                 </div>
               ))}
             </div>
+          </div>
+        </div>
 
-            {/* Additional Help Card */}
-            <div className="mt-8 bg-gradient-to-br from-primary-600 to-primary-700 rounded-xl p-6 text-white">
-              <div className="flex items-start space-x-4">
-                <div className="flex-shrink-0">
-                  <div className="w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center">
-                    <QuestionMarkCircleIcon className="h-6 w-6 text-white" />
-                  </div>
+        {/* Still have questions? - Full width card below both columns */}
+        <div className="mt-8">
+          <div className="bg-gradient-to-br from-primary-600 to-primary-700 rounded-xl p-8 text-white">
+            <div className="flex flex-col md:flex-row items-center justify-between">
+              <div className="flex items-center space-x-4 mb-4 md:mb-0">
+                <div className="w-16 h-16 bg-white/20 rounded-lg flex items-center justify-center">
+                  <QuestionMarkCircleIcon className="h-8 w-8 text-white" />
                 </div>
-                <div className="flex-1">
-                  <h3 className="text-lg font-semibold mb-2">Still have questions?</h3>
-                  <p className="text-primary-100 mb-4">
+                <div>
+                  <h3 className="text-xl font-semibold mb-1">Still have questions?</h3>
+                  <p className="text-primary-100">
                     Can't find what you're looking for? Our support team is here to help 24/7.
                   </p>
-                  <div className="flex flex-wrap gap-4">
-                    <Link
-                      to="/docs"
-                      className="text-sm font-medium bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg transition-colors"
-                    >
-                      Browse Documentation
-                    </Link>
-                    <a
-                      href="#contact-form"
-                      className="text-sm font-medium bg-white text-primary-600 hover:bg-gray-100 px-4 py-2 rounded-lg transition-colors"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        document
-                          .getElementById('contact-form')
-                          ?.scrollIntoView({ behavior: 'smooth' });
-                      }}
-                    >
-                      Contact Support
-                    </a>
-                  </div>
                 </div>
+              </div>
+              <div className="flex flex-wrap gap-4">
+                <Link
+                  to="/docs"
+                  className="text-sm font-medium bg-white/20 hover:bg-white/30 px-6 py-3 rounded-lg transition-colors"
+                >
+                  Browse Documentation
+                </Link>
+                <a
+                  href="#contact-form"
+                  className="text-sm font-medium bg-white text-primary-600 hover:bg-gray-100 px-6 py-3 rounded-lg transition-colors"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    document.getElementById('contact-form')?.scrollIntoView({ behavior: 'smooth' });
+                  }}
+                >
+                  Contact Support
+                </a>
               </div>
             </div>
           </div>

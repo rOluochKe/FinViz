@@ -10,12 +10,10 @@ import {
   CurrencyDollarIcon,
   DevicePhoneMobileIcon,
   GlobeAltIcon,
-  LifebuoyIcon,
   PresentationChartLineIcon,
   ShieldCheckIcon,
   SparklesIcon,
   StarIcon,
-  TicketIcon,
   UserGroupIcon,
   UserIcon,
 } from '@heroicons/react/24/outline';

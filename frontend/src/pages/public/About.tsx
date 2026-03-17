@@ -1,20 +1,16 @@
 import React from 'react';
 
 import {
-  AcademicCapIcon,
-  BuildingOfficeIcon,
   CheckBadgeIcon,
   CodeBracketIcon,
   FlagIcon,
   GlobeAltIcon,
-  HandRaisedIcon,
   HeartIcon,
   LightBulbIcon,
   RocketLaunchIcon,
   ShieldCheckIcon,
   SparklesIcon,
   TrophyIcon,
-  UserGroupIcon,
   UsersIcon,
 } from '@heroicons/react/24/outline';
 
