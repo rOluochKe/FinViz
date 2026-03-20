@@ -2,12 +2,48 @@
 Category schemas for serialization and validation.
 """
 
+from datetime import datetime
 from marshmallow import Schema, ValidationError, fields, post_load, pre_load, validate
 from marshmallow_sqlalchemy import SQLAlchemyAutoSchema
 
 from app.models.category import Category
 from app.utils.constants import CategoryType
 from app.utils.validators import validate_hex_color
+
+
+class CustomDateTime(fields.DateTime):
+    """
+    Custom DateTime field that handles both ISO format and space-separated format.
+    """
+    def __init__(self, *args, **kwargs):
+        # Don't specify format to allow flexible parsing
+        super().__init__(*args, **kwargs)
+
+    def _serialize(self, value, attr, obj, **kwargs):
+        """Convert datetime to string in ISO format."""
+        if value is None:
+            return None
+        
+        if isinstance(value, datetime):
+            return value.isoformat()
+        
+        # If it's already a string, convert space to T for ISO format
+        if isinstance(value, str):
+            # Replace space with T for ISO format
+            return value.replace(' ', 'T')
+        
+        return str(value)
+    
+    def _deserialize(self, value, attr, data, **kwargs):
+        """Parse datetime string, handling both formats."""
+        if value is None:
+            return None
+        
+        if isinstance(value, str):
+            # Replace space with T for ISO format
+            value = value.replace(' ', 'T')
+        
+        return super()._deserialize(value, attr, data, **kwargs)
 
 
 class CategorySchema(SQLAlchemyAutoSchema):
@@ -18,7 +54,7 @@ class CategorySchema(SQLAlchemyAutoSchema):
         load_instance = True
         include_fk = True
 
-    id = fields.Integer(dump_only=True)
+    id = fields.UUID(dump_only=True)
     name = fields.String(required=True, validate=validate.Length(min=1, max=50))
     type = fields.String(required=True, validate=validate.OneOf(CategoryType.choices()))
     color = fields.String(
@@ -26,12 +62,14 @@ class CategorySchema(SQLAlchemyAutoSchema):
     )
     icon = fields.String(allow_none=True, validate=validate.Length(max=50))
     description = fields.String(allow_none=True, validate=validate.Length(max=200))
-    parent_id = fields.Integer(allow_none=True)
-    user_id = fields.Integer(dump_only=True)
+    parent_id = fields.UUID(allow_none=True)
+    user_id = fields.UUID(dump_only=True)
     is_system = fields.Boolean(dump_only=True)
     is_active = fields.Boolean(dump_only=True)
-    created_at = fields.DateTime(dump_only=True, format="%Y-%m-%d %H:%M:%S")
-    updated_at = fields.DateTime(dump_only=True, format="%Y-%m-%d %H:%M:%S")
+    
+    # Use custom datetime field to handle both formats
+    created_at = CustomDateTime(dump_only=True)
+    updated_at = CustomDateTime(dump_only=True)
 
     # Computed fields
     full_path = fields.String(dump_only=True)
@@ -59,7 +97,7 @@ class CategoryCreateSchema(Schema):
     )
     icon = fields.String(allow_none=True, validate=validate.Length(max=50))
     description = fields.String(allow_none=True, validate=validate.Length(max=200))
-    parent_id = fields.Integer(allow_none=True)
+    parent_id = fields.UUID(allow_none=True)
 
     @pre_load
     def validate_color(self, data, **kwargs):
@@ -90,7 +128,6 @@ class CategoryCreateSchema(Schema):
     @post_load
     def validate_name(self, data, **kwargs):
         """Validate category name."""
-        # Additional name validation if needed
         if len(data["name"]) < 1:
             raise ValidationError("Category name cannot be empty", "name")
         return data
@@ -128,14 +165,14 @@ class CategoryFilterSchema(Schema):
     type = fields.String(validate=validate.OneOf(CategoryType.choices()))
     include_system = fields.Boolean(load_default=True)
     include_inactive = fields.Boolean(load_default=False)
-    parent_id = fields.Integer(allow_none=True)
+    parent_id = fields.UUID(allow_none=True)
     search = fields.String(allow_none=True)
 
 
 class CategoryHierarchySchema(Schema):
     """Schema for category hierarchy."""
 
-    id = fields.Integer()
+    id = fields.UUID()
     name = fields.String()
     type = fields.String()
     color = fields.String()
@@ -150,7 +187,7 @@ class CategoryHierarchySchema(Schema):
 class CategoryStatsSchema(Schema):
     """Schema for category statistics."""
 
-    category_id = fields.Integer()
+    category_id = fields.UUID()
     category_name = fields.String()
     category_color = fields.String()
     transaction_count = fields.Integer()

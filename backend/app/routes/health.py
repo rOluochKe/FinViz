@@ -4,6 +4,7 @@ Health check routes with Flask-RESTX.
 
 import os
 import platform
+import uuid
 from datetime import datetime
 
 import psutil
@@ -223,8 +224,6 @@ class BasicHealth(Resource):
                 "service": "finviz-backend",
                 "database": "disconnected",
             }
-            # You can include the error in the response if needed
-            # response["error"] = str(e)
             return response, HTTP_STATUS.SERVICE_UNAVAILABLE
 
 

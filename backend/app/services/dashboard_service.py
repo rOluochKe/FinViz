@@ -2,6 +2,7 @@
 Dashboard service for aggregated dashboard data.
 """
 
+import uuid
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 from typing import Dict, List
@@ -16,12 +17,12 @@ class DashboardService:
     """Service for dashboard data aggregation."""
 
     @staticmethod
-    def get_kpis(user_id: int, days: int = 30) -> Dict:
+    def get_kpis(user_id: uuid.UUID, days: int = 30) -> Dict:
         """
         Get key performance indicators.
 
         Args:
-            user_id: User ID
+            user_id: User ID (UUID)
             days: Days to analyze
 
         Returns:
@@ -73,7 +74,7 @@ class DashboardService:
         }
 
     @staticmethod
-    def get_recent_transactions(user_id: int, limit: int = 10) -> List[Dict]:
+    def get_recent_transactions(user_id: uuid.UUID, limit: int = 10) -> List[Dict]:
         """Get recent transactions."""
         tx = (
             Transaction.query.filter_by(user_id=user_id)
@@ -84,7 +85,7 @@ class DashboardService:
 
         return [
             {
-                "id": t.id,
+                "id": str(t.id),
                 "date": t.date.isoformat(),
                 "desc": t.description,
                 "amount": float(t.amount),
@@ -96,7 +97,7 @@ class DashboardService:
         ]
 
     @staticmethod
-    def get_spending_by_category(user_id: int, days: int = 30) -> List[Dict]:
+    def get_spending_by_category(user_id: uuid.UUID, days: int = 30) -> List[Dict]:
         """Get spending breakdown by category."""
         end = date.today()
         start = end - timedelta(days=days)
@@ -124,7 +125,7 @@ class DashboardService:
         ]
 
     @staticmethod
-    def get_monthly_trends(user_id: int, months: int = 6) -> Dict:
+    def get_monthly_trends(user_id: uuid.UUID, months: int = 6) -> Dict:
         """Get monthly income/expense trends."""
         end = date.today()
         data = []
@@ -157,7 +158,7 @@ class DashboardService:
         return {"trends": list(reversed(data))}
 
     @staticmethod
-    def get_insights(user_id: int) -> List[Dict]:
+    def get_insights(user_id: uuid.UUID) -> List[Dict]:
         """Generate quick insights."""
         insights = []
 
@@ -209,7 +210,7 @@ class DashboardService:
         return insights
 
     @staticmethod
-    def get_full_dashboard(user_id: int, days: int = 30) -> Dict:
+    def get_full_dashboard(user_id: uuid.UUID, days: int = 30) -> Dict:
         """Get complete dashboard data."""
         return {
             "kpis": DashboardService.get_kpis(user_id, days),

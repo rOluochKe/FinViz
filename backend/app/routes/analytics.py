@@ -2,8 +2,11 @@
 Analytics routes with Flask-RESTX.
 """
 
+import uuid
+import logging
 from collections import defaultdict
 from datetime import datetime, timedelta
+from functools import wraps
 
 from flask import request
 from flask_jwt_extended import get_jwt_identity, jwt_required
@@ -16,6 +19,36 @@ from app.services.report_service import ReportService
 
 # Create namespace
 analytics_ns = Namespace("analytics", description="Analytics operations")
+
+logger = logging.getLogger(__name__)
+
+# ============================================================================
+# Helper Decorator for Safe Caching
+# ============================================================================
+
+def safe_cache_cached(timeout=300, query_string=False):
+    """
+    Decorator that safely handles cache unavailability.
+    If Redis is not available, it skips caching and executes the function directly.
+    
+    Args:
+        timeout: Cache timeout in seconds
+        query_string: Whether to include query string in cache key
+    """
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            try:
+                # Try to use cache if available
+                if query_string:
+                    return cache.cached(timeout=timeout, query_string=True)(f)(*args, **kwargs)
+                else:
+                    return cache.cached(timeout=timeout)(f)(*args, **kwargs)
+            except Exception as e:
+                logger.debug(f"Cache unavailable, skipping cache: {str(e)}")
+                return f(*args, **kwargs)
+        return decorated_function
+    return decorator
 
 # ============================================================================
 # Model Definitions
@@ -35,7 +68,10 @@ time_series_point = analytics_ns.model(
 category_insight = analytics_ns.model(
     "CategoryInsight",
     {
-        "category_id": fields.Integer(description="Category ID", example=1),
+        "category_id": fields.String(
+            description="Category ID (UUID)",
+            example="123e4567-e89b-12d3-a456-426614174000",
+        ),
         "category": fields.String(description="Category name", example="Groceries"),
         "color": fields.String(description="Category color", example="#dc3545"),
         "total": fields.Float(description="Total amount", example=1250.50),
@@ -62,7 +98,10 @@ forecast_period = analytics_ns.model(
 anomaly_model = analytics_ns.model(
     "Anomaly",
     {
-        "id": fields.Integer(description="Transaction ID", example=123),
+        "id": fields.String(
+            description="Transaction ID (UUID)",
+            example="123e4567-e89b-12d3-a456-426614174000",
+        ),
         "date": fields.String(description="Date", example="2024-01-15"),
         "amount": fields.Float(description="Amount", example=999.99),
         "desc": fields.String(
@@ -89,7 +128,7 @@ class SpendingPatterns(Resource):
         "months", "Number of months to analyze", type="integer", default=6
     )
     @jwt_required()
-    @cache.cached(timeout=300, query_string=True)
+    @safe_cache_cached(timeout=300, query_string=True)  # Safe cache with query string
     def get(self):
         """Get spending pattern analysis"""
         user_id = get_jwt_identity()
@@ -139,7 +178,7 @@ class Forecast(Resource):
         )
     )
     @jwt_required()
-    @cache.cached(timeout=3600)
+    @safe_cache_cached(timeout=3600)  # Safe cache for 1 hour
     def get(self):
         """Get financial forecast"""
         user_id = get_jwt_identity()
@@ -176,7 +215,7 @@ class MonthlyReport(Resource):
         responses={200: "Report generated"},
     )
     @jwt_required()
-    @cache.cached(timeout=300)
+    @safe_cache_cached(timeout=300)  # Safe cache for 5 minutes
     def get(self, year, month):
         """Get monthly report"""
         user_id = get_jwt_identity()
@@ -194,7 +233,7 @@ class YearlyReport(Resource):
         responses={200: "Report generated"},
     )
     @jwt_required()
-    @cache.cached(timeout=600)
+    @safe_cache_cached(timeout=600)  # Safe cache for 10 minutes
     def get(self, year):
         """Get yearly report"""
         user_id = get_jwt_identity()
@@ -203,8 +242,8 @@ class YearlyReport(Resource):
         return result
 
 
-@analytics_ns.route("/category/<int:category_id>")
-@analytics_ns.param("category_id", "Category ID", required=True)
+@analytics_ns.route("/category/<string:category_id>")
+@analytics_ns.param("category_id", "Category ID (UUID)", required=True)
 class CategoryReport(Resource):
     @analytics_ns.doc(
         description="Get detailed report for a specific category",
@@ -218,7 +257,15 @@ class CategoryReport(Resource):
         user_id = get_jwt_identity()
         months = request.args.get("months", 12, type=int)
 
-        result = ReportService.category_report(user_id, category_id, months)
+        if months < 1 or months > 36:
+            analytics_ns.abort(400, "Months must be between 1 and 36")
+
+        try:
+            category_uuid = uuid.UUID(category_id)
+        except ValueError:
+            analytics_ns.abort(400, "Invalid category ID format. Must be a valid UUID.")
+
+        result = ReportService.category_report(user_id, category_uuid, months)
         return result
 
 
@@ -237,7 +284,7 @@ class Trends(Resource):
         enum=["day", "week", "month"],
     )
     @jwt_required()
-    @cache.cached(timeout=300)
+    @safe_cache_cached(timeout=300, query_string=True)  # Safe cache with query string
     def get(self):
         """Get spending trends"""
         user_id = get_jwt_identity()
@@ -263,7 +310,7 @@ class Trends(Resource):
                 key = t.date.isoformat()
             elif group_by == "week":
                 year, week, _ = t.date.isocalendar()
-                key = f"{year}-W{week}"
+                key = f"{year}-W{week:02d}"
             else:
                 key = f"{t.date.year}-{t.date.month:02d}"
 

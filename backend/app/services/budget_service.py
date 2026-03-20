@@ -2,6 +2,7 @@
 Budget service for budget calculations and recommendations.
 """
 
+import uuid
 from collections import defaultdict
 from datetime import date, timedelta
 from typing import Dict, List, Optional
@@ -18,12 +19,14 @@ class BudgetService:
     """Service for budget operations."""
 
     @staticmethod
-    def get_budget_status(user_id: int, year: int = None, month: int = None) -> Dict:
+    def get_budget_status(
+        user_id: uuid.UUID, year: int = None, month: int = None
+    ) -> Dict:
         """
         Get current budget status.
 
         Args:
-            user_id: User ID
+            user_id: User ID (UUID)
             year: Year (default: current)
             month: Month (default: current)
 
@@ -59,7 +62,7 @@ class BudgetService:
             total_spent += spent
 
             cat_data = {
-                "id": b.id,
+                "id": str(b.id),
                 "category": b.category.name if b.category else "Unknown",
                 "color": b.category.color if b.category else "#808080",
                 "budget": amount,
@@ -105,12 +108,12 @@ class BudgetService:
         }
 
     @staticmethod
-    def suggest_budgets(user_id: int) -> List[Dict]:
+    def suggest_budgets(user_id: uuid.UUID) -> List[Dict]:
         """
         Suggest budget amounts based on spending history.
 
         Args:
-            user_id: User ID
+            user_id: User ID (UUID)
 
         Returns:
             List of budget suggestions
@@ -157,7 +160,7 @@ class BudgetService:
 
             suggestions.append(
                 {
-                    "category_id": cat_id,
+                    "category_id": str(cat_id),
                     "category": category.name,
                     "color": category.color,
                     "current_avg": round(avg_monthly, 2),
@@ -175,14 +178,14 @@ class BudgetService:
 
     @staticmethod
     def create_budget_from_suggestion(
-        user_id: int, category_id: int, year: int, month: int = None
+        user_id: uuid.UUID, category_id: uuid.UUID, year: int, month: int = None
     ) -> Optional[Budget]:
         """
         Create budget from suggestion.
 
         Args:
-            user_id: User ID
-            category_id: Category ID
+            user_id: User ID (UUID)
+            category_id: Category ID (UUID)
             year: Year
             month: Month (for monthly budgets)
 
@@ -191,7 +194,7 @@ class BudgetService:
         """
         suggestions = BudgetService.suggest_budgets(user_id)
         suggestion = next(
-            (s for s in suggestions if s["category_id"] == category_id), None
+            (s for s in suggestions if s["category_id"] == str(category_id)), None
         )
 
         if not suggestion:
@@ -229,13 +232,13 @@ class BudgetService:
 
     @staticmethod
     def rollover_budgets(
-        user_id: int, from_month: int, from_year: int, to_month: int, to_year: int
+        user_id: uuid.UUID, from_month: int, from_year: int, to_month: int, to_year: int
     ) -> int:
         """
         Rollover unused budget amounts to next month.
 
         Args:
-            user_id: User ID
+            user_id: User ID (UUID)
             from_month: Source month
             from_year: Source year
             to_month: Target month

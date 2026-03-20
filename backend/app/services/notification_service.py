@@ -3,6 +3,7 @@ Notification service for alerts and notifications.
 """
 
 import smtplib
+import uuid
 from collections import defaultdict
 from datetime import date, timedelta
 from email.mime.multipart import MIMEMultipart
@@ -20,12 +21,12 @@ class NotificationService:
     """Service for sending notifications."""
 
     @staticmethod
-    def check_budget_alerts(user_id: int) -> List[Dict]:
+    def check_budget_alerts(user_id: uuid.UUID) -> List[Dict]:
         """
         Check for budgets that need alerts.
 
         Args:
-            user_id: User ID
+            user_id: User ID (UUID)
 
         Returns:
             List of budget alerts
@@ -42,7 +43,7 @@ class NotificationService:
             if b.should_alert:
                 alerts.append(
                     {
-                        "budget_id": b.id,
+                        "budget_id": str(b.id),
                         "category": b.category.name if b.category else "Unknown",
                         "spent": b.spent,
                         "budget": float(b.amount),
@@ -54,12 +55,14 @@ class NotificationService:
         return alerts
 
     @staticmethod
-    def check_large_transactions(user_id: int, threshold: float = 1000) -> List[Dict]:
+    def check_large_transactions(
+        user_id: uuid.UUID, threshold: float = 1000
+    ) -> List[Dict]:
         """
         Check for unusually large transactions.
 
         Args:
-            user_id: User ID
+            user_id: User ID (UUID)
             threshold: Amount threshold
 
         Returns:
@@ -76,7 +79,7 @@ class NotificationService:
 
         return [
             {
-                "id": t.id,
+                "id": str(t.id),
                 "amount": float(t.amount),
                 "desc": t.description,
                 "date": t.date.isoformat(),
@@ -135,12 +138,12 @@ class NotificationService:
         NotificationService.send_email(user.email, subject, body)
 
     @staticmethod
-    def weekly_summary(user_id: int) -> Dict:
+    def weekly_summary(user_id: uuid.UUID) -> Dict:
         """
         Generate weekly summary for user.
 
         Args:
-            user_id: User ID
+            user_id: User ID (UUID)
 
         Returns:
             Weekly summary data

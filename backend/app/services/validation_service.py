@@ -2,6 +2,7 @@
 Validation service for complex validation logic.
 """
 
+import uuid
 from datetime import datetime
 from typing import Dict, List
 
@@ -53,13 +54,13 @@ class ValidationService:
         return errors
 
     @staticmethod
-    def validate_transaction(data: Dict, user_id: int) -> List[str]:
+    def validate_transaction(data: Dict, user_id: uuid.UUID) -> List[str]:
         """
         Validate transaction data.
 
         Args:
             data: Transaction data
-            user_id: User ID
+            user_id: User ID (UUID)
 
         Returns:
             List of validation errors
@@ -105,13 +106,13 @@ class ValidationService:
         return errors
 
     @staticmethod
-    def validate_budget(data: Dict, user_id: int) -> List[str]:
+    def validate_budget(data: Dict, user_id: uuid.UUID) -> List[str]:
         """
         Validate budget data.
 
         Args:
             data: Budget data
-            user_id: User ID
+            user_id: User ID (UUID)
 
         Returns:
             List of validation errors

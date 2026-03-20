@@ -1,201 +1,334 @@
 #!/usr/bin/env python3
 """
-Database seeding script.
+Generate mock data for testing with UUIDs.
 """
-import sys
-import os
+import json
+import csv
 import argparse
-from datetime import datetime, timedelta
 import random
+import uuid
+from datetime import datetime, timedelta
 from faker import Faker
-
-# Add parent directory to path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
-from app import create_app
-from app.extensions import db
-from app.models.user import User
-from app.models.category import Category
-from app.models.transaction import Transaction
-from app.models.budget import Budget
-from app.utils.constants import DEFAULT_CATEGORIES
 
 fake = Faker()
 
 def parse_args():
     """Parse command line arguments."""
-    parser = argparse.ArgumentParser(description='Seed database with test data')
-    parser.add_argument('--users', type=int, default=3, help='Number of test users')
-    parser.add_argument('--transactions', type=int, default=100, help='Transactions per user')
-    parser.add_argument('--clean', action='store_true', help='Clean existing data')
-    parser.add_argument('--env', default='development', help='Environment')
+    parser = argparse.ArgumentParser(description='Generate mock data')
+    parser.add_argument('--type', choices=['transactions', 'budgets', 'stats', 'all'],
+                       default='all', help='Type of data')
+    parser.add_argument('--count', type=int, default=100, help='Number of records')
+    parser.add_argument('--format', choices=['json', 'csv', 'both'],
+                       default='both', help='Output format')
+    parser.add_argument('--output', default='mock_data', help='Output prefix')
     return parser.parse_args()
 
-def main():
-    """Main seeding function."""
-    args = parse_args()
+def generate_transactions(count):
+    """Generate mock transactions with UUIDs."""
+    categories = {
+        'income': ['Salary', 'Freelance', 'Investment', 'Gifts'],
+        'expense': ['Groceries', 'Rent', 'Utilities', 'Entertainment', 
+                   'Transportation', 'Healthcare', 'Dining Out', 'Shopping'],
+        'transfer': ['Transfer']
+    }
     
-    app = create_app(args.env)
+    colors = {
+        'Salary': '#28a745', 'Freelance': '#17a2b8', 'Investment': '#ffc107',
+        'Gifts': '#e83e8c', 'Groceries': '#dc3545', 'Rent': '#fd7e14',
+        'Utilities': '#6c757d', 'Entertainment': '#e83e8c', 'Transportation': '#20c997',
+        'Healthcare': '#007bff', 'Dining Out': '#6610f2', 'Shopping': '#d63384',
+        'Transfer': '#6f42c1'
+    }
     
-    with app.app_context():
-        print(f"🌱 Seeding database with {args.users} users...")
-        
-        if args.clean:
-            print("Cleaning existing data...")
-            db.session.query(Transaction).delete()
-            db.session.query(Budget).delete()
-            db.session.query(Category).filter_by(is_system=False).delete()
-            db.session.query(User).delete()
-            db.session.commit()
-        
-        # Create system categories if not exist
-        create_system_categories()
-        
-        # Create users
-        users = []
-        for i in range(args.users):
-            user = create_user(i)
-            users.append(user)
-            print(f"  ✓ Created user: {user.username}")
-        
-        # Create data for each user
-        for user in users:
-            create_categories(user)
-            create_transactions(user, args.transactions)
-            create_budgets(user)
-            print(f"  ✓ Created data for user: {user.username}")
-        
-        db.session.commit()
-        print("✅ Database seeded successfully!")
-
-def create_system_categories():
-    """Create system categories."""
-    for cat_data in DEFAULT_CATEGORIES:
-        existing = Category.query.filter_by(
-            name=cat_data['name'],
-            is_system=True
-        ).first()
-        
-        if not existing:
-            category = Category(**cat_data, is_system=True)
-            db.session.add(category)
+    # Generate a consistent user UUID for all transactions (mock user)
+    user_uuid = uuid.uuid4()
     
-    db.session.flush()
-
-def create_user(index):
-    """Create a test user."""
-    username = f"testuser_{index}"
-    email = f"test{index}@example.com"
-    
-    user = User(
-        username=username,
-        email=email,
-        first_name=fake.first_name(),
-        last_name=fake.last_name(),
-        email_verified=True
-    )
-    user.set_password("Test123!@#")
-    
-    db.session.add(user)
-    db.session.flush()
-    
-    return user
-
-def create_categories(user):
-    """Create categories for user."""
-    # Copy system categories
-    system_cats = Category.query.filter_by(is_system=True).all()
-    
-    for sys_cat in system_cats:
-        existing = Category.query.filter_by(
-            name=sys_cat.name,
-            user_id=user.id
-        ).first()
-        
-        if not existing:
-            category = Category(
-                name=sys_cat.name,
-                type=sys_cat.type,  # This is a string
-                color=sys_cat.color,
-                icon=sys_cat.icon,
-                user_id=user.id,
-                is_system=False
-            )
-            db.session.add(category)
-    
-    db.session.flush()
-
-def create_transactions(user, count):
-    """Create transactions for user."""
-    categories = Category.query.filter_by(user_id=user.id).all()
-    
-    if not categories:
-        return
-    
+    transactions = []
     end_date = datetime.now().date()
     start_date = end_date - timedelta(days=365)
     
-    transactions = []
-    
-    for _ in range(count):
+    for i in range(count):
         tx_date = start_date + timedelta(days=random.randint(0, 365))
-        category = random.choice(categories)
         
-        # Check type as string (not enum)
-        if category.type == 'income':
-            amount = random.uniform(500, 5000)
-        else:  # expense or transfer
-            amount = random.uniform(5, 500)
+        rand = random.random()
+        if rand < 0.3:
+            tx_type = 'income'
+            cat_name = random.choice(categories['income'])
+            amount = round(random.uniform(500, 5000), 2)
+        elif rand < 0.65:
+            tx_type = 'expense'
+            cat_name = random.choice(categories['expense'])
+            amount = round(random.uniform(5, 500), 2)
+        else:
+            tx_type = 'transfer'
+            cat_name = 'Transfer'
+            amount = round(random.uniform(50, 1000), 2)
         
-        transaction = Transaction(
-            user_id=user.id,
-            category_id=category.id,
-            amount=round(amount, 2),
-            description=fake.sentence(nb_words=4),
-            date=tx_date,
-            type=category.type  # This is already a string
-        )
-        transactions.append(transaction)
+        # Generate category UUID
+        category_uuid = uuid.uuid4()
+        
+        transactions.append({
+            'id': str(uuid.uuid4()), 
+            'user_id': str(user_uuid),  
+            'category_id': str(category_uuid),  
+            'date': tx_date.isoformat(),
+            'description': fake.sentence(nb_words=4),
+            'amount': amount,
+            'type': tx_type,
+            'category_name': cat_name,
+            'category_color': colors.get(cat_name, '#808080'),
+            'notes': fake.text(max_nb_chars=200) if random.random() < 0.3 else '',
+            'tags': random.sample(['work', 'personal', 'travel', 'food'], 
+                                 k=random.randint(0, 2)) if random.random() < 0.5 else [],
+            'is_recurring': random.random() < 0.1,  # 10% chance of recurring
+            'recurring_frequency': random.choice(['monthly', 'weekly', None]) if random.random() < 0.05 else None,
+            'created_at': datetime.now().isoformat(),
+            'updated_at': datetime.now().isoformat()
+        })
     
-    db.session.bulk_save_objects(transactions)
-    db.session.flush()
+    return sorted(transactions, key=lambda x: x['date'])
 
-def create_budgets(user):
-    """Create budgets for user."""
-    expense_cats = Category.query.filter_by(
-        user_id=user.id,
-        type='expense'  # String, not enum
-    ).all()
+def generate_budgets(count):
+    """Generate mock budgets with UUIDs."""
+    categories = [
+        {'name': 'Groceries', 'color': '#dc3545'},
+        {'name': 'Dining Out', 'color': '#6610f2'},
+        {'name': 'Entertainment', 'color': '#e83e8c'},
+        {'name': 'Transportation', 'color': '#20c997'},
+        {'name': 'Shopping', 'color': '#d63384'},
+        {'name': 'Utilities', 'color': '#6c757d'}
+    ]
     
-    if not expense_cats:
-        return
-    
-    current_year = datetime.now().year
-    current_month = datetime.now().month
+    # Generate a consistent user UUID for all budgets
+    user_uuid = uuid.uuid4()
     
     budgets = []
+    year = datetime.now().year
     
-    # Select random categories for budgets
-    selected_categories = random.sample(
-        expense_cats, 
-        min(5, len(expense_cats))
-    )
+    for i in range(count):
+        category = random.choice(categories)
+        period = random.choice(['monthly', 'yearly'])
+        
+        # Generate category UUID
+        category_uuid = uuid.uuid4()
+        
+        if period == 'monthly':
+            amount = round(random.uniform(200, 1000), 2)
+            month = random.randint(1, 12)
+        else:
+            amount = round(random.uniform(2000, 10000), 2)
+            month = None
+        
+        # Calculate spent amount (random percentage of budget)
+        spent = round(random.uniform(0, amount * 1.2), 2)
+        remaining = round(amount - spent, 2)
+        spent_percentage = round((spent / amount) * 100, 1) if amount > 0 else 0
+        
+        budgets.append({
+            'id': str(uuid.uuid4()),  
+            'user_id': str(user_uuid),  
+            'category_id': str(category_uuid), 
+            'category_name': category['name'],
+            'category_color': category['color'],
+            'amount': amount,
+            'period': period,
+            'year': year,
+            'month': month,
+            'spent': spent,
+            'remaining': remaining,
+            'spent_percentage': spent_percentage,
+            'alert_threshold': 80,
+            'is_over_budget': spent > amount,
+            'should_alert': spent_percentage >= 80,
+            'is_active': True,
+            'rollover': random.random() < 0.3,
+            'notes': fake.sentence(nb_words=5) if random.random() < 0.3 else '',
+            'created_at': datetime.now().isoformat(),
+            'updated_at': datetime.now().isoformat()
+        })
     
-    for category in selected_categories:
-        budget = Budget(
-            user_id=user.id,
-            category_id=category.id,
-            amount=random.uniform(200, 1000),
-            period='monthly',
-            month=current_month,
-            year=current_year,
-            alert_threshold=80,
-            is_active=True
-        )
-        budgets.append(budget)
+    return budgets
+
+def generate_stats():
+    """Generate monthly statistics with UUIDs."""
+    # Generate a consistent user UUID for all stats
+    user_uuid = uuid.uuid4()
     
-    db.session.bulk_save_objects(budgets)
-    db.session.flush()
+    stats = []
+    year = datetime.now().year
+    
+    for month in range(1, 13):
+        base_income = random.uniform(3000, 5000)
+        base_expense = random.uniform(2000, 4000)
+        
+        # Add seasonality
+        if month in [12, 1]:
+            expense_multiplier = 1.3
+        elif month in [6, 7, 8]:
+            expense_multiplier = 1.1
+        else:
+            expense_multiplier = 1.0
+        
+        income = round(base_income * random.uniform(0.9, 1.1), 2)
+        expense = round(base_expense * expense_multiplier * random.uniform(0.9, 1.1), 2)
+        savings = round(income - expense, 2)
+        savings_rate = round((savings / income) * 100, 1) if income > 0 else 0
+        transaction_count = random.randint(20, 50)
+        
+        # Generate category breakdown for the month
+        category_breakdown = []
+        top_categories = []
+        categories = ['Groceries', 'Dining Out', 'Entertainment', 'Transportation', 'Shopping', 'Utilities']
+        
+        for cat in categories:
+            cat_amount = round(expense * random.uniform(0.05, 0.3), 2)
+            cat_count = random.randint(1, 10)
+            percentage = round((cat_amount / expense) * 100, 1) if expense > 0 else 0
+            
+            breakdown = {
+                'name': cat,
+                'color': {
+                    'Groceries': '#dc3545',
+                    'Dining Out': '#6610f2',
+                    'Entertainment': '#e83e8c',
+                    'Transportation': '#20c997',
+                    'Shopping': '#d63384',
+                    'Utilities': '#6c757d'
+                }.get(cat, '#808080'),
+                'amount': cat_amount,
+                'count': cat_count,
+                'percentage': percentage
+            }
+            category_breakdown.append(breakdown)
+            
+            if random.random() < 0.3:  # 30% chance to be in top categories
+                top_categories.append(breakdown)
+        
+        # Sort top categories by amount
+        top_categories = sorted(top_categories, key=lambda x: x['amount'], reverse=True)[:3]
+        
+        stats.append({
+            'id': str(uuid.uuid4()),
+            'user_id': str(user_uuid), 
+            'year': year,
+            'month': month,
+            'month_name': datetime(year, month, 1).strftime('%B'),
+            'total_income': income,
+            'total_expense': expense,
+            'net_savings': savings,
+            'savings_rate': savings_rate,
+            'transaction_count': transaction_count,
+            'average_transaction': round((income + expense) / transaction_count, 2) if transaction_count > 0 else 0,
+            'top_categories': top_categories,
+            'category_breakdown': category_breakdown,
+            'best_day': (datetime(year, month, random.randint(1, 28)).date()).isoformat() if random.random() < 0.7 else None,
+            'worst_day': (datetime(year, month, random.randint(1, 28)).date()).isoformat() if random.random() < 0.7 else None,
+            'created_at': datetime.now().isoformat(),
+            'updated_at': datetime.now().isoformat()
+        })
+    
+    return stats
+
+def generate_users(count=5):
+    """Generate mock users with UUIDs."""
+    users = []
+    
+    for i in range(count):
+        first_name = fake.first_name()
+        last_name = fake.last_name()
+        
+        users.append({
+            'id': str(uuid.uuid4()),  # UUID
+            'username': f"{first_name.lower()}{last_name.lower()}{random.randint(1, 999)}",
+            'email': fake.email(),
+            'first_name': first_name,
+            'last_name': last_name,
+            'full_name': f"{first_name} {last_name}",
+            'password_hash': '$2b$12$hashed_password_placeholder',  # Placeholder hash
+            'role': random.choice(['user', 'admin']) if i == 0 else 'user',
+            'status': random.choice(['active', 'inactive']) if random.random() < 0.9 else 'suspended',
+            'preferences': {
+                'currency': random.choice(['USD', 'EUR', 'GBP']),
+                'theme': random.choice(['light', 'dark']),
+                'language': 'en',
+                'notifications': {
+                    'email': random.choice([True, False]),
+                    'budget_alerts': True
+                },
+                'dashboard': {
+                    'default_view': 'monthly',
+                    'chart_type': 'line',
+                    'show_recent': 10
+                }
+            },
+            'email_verified': random.random() < 0.8,
+            'created_at': (datetime.now() - timedelta(days=random.randint(1, 365))).isoformat(),
+            'last_login': (datetime.now() - timedelta(days=random.randint(0, 30))).isoformat() if random.random() < 0.9 else None
+        })
+    
+    return users
+
+def save_json(data, filename):
+    """Save data as JSON."""
+    with open(filename, 'w') as f:
+        json.dump(data, f, indent=2, default=str) 
+    print(f"Saved {len(data)} records to {filename}")
+
+def save_csv(data, filename):
+    """Save data as CSV."""
+    if not data:
+        return
+    
+    with open(filename, 'w', newline='') as f:
+        # Handle nested structures for CSV (simplify complex fields)
+        simplified_data = []
+        for record in data:
+            simplified_record = {}
+            for key, value in record.items():
+                if isinstance(value, (dict, list)):
+                    # Convert nested structures to JSON string
+                    simplified_record[key] = json.dumps(value)
+                else:
+                    simplified_record[key] = value
+            simplified_data.append(simplified_record)
+        
+        writer = csv.DictWriter(f, fieldnames=simplified_data[0].keys())
+        writer.writeheader()
+        writer.writerows(simplified_data)
+    print(f"Saved {len(data)} records to {filename}")
+
+def main():
+    """Main function."""
+    args = parse_args()
+    
+    if args.type in ['transactions', 'all']:
+        data = generate_transactions(args.count)
+        if args.format in ['json', 'both']:
+            save_json(data, f"{args.output}_transactions.json")
+        if args.format in ['csv', 'both']:
+            save_csv(data, f"{args.output}_transactions.csv")
+    
+    if args.type in ['budgets', 'all']:
+        data = generate_budgets(min(20, args.count))
+        if args.format in ['json', 'both']:
+            save_json(data, f"{args.output}_budgets.json")
+        if args.format in ['csv', 'both']:
+            save_csv(data, f"{args.output}_budgets.csv")
+    
+    if args.type in ['stats', 'all']:
+        data = generate_stats()
+        if args.format in ['json', 'both']:
+            save_json(data, f"{args.output}_stats.json")
+        if args.format in ['csv', 'both']:
+            save_csv(data, f"{args.output}_stats.csv")
+    
+    # Generate users separately if needed
+    if args.type == 'all':
+        users = generate_users(5)
+        if args.format in ['json', 'both']:
+            save_json(users, f"{args.output}_users.json")
+        if args.format in ['csv', 'both']:
+            save_csv(users, f"{args.output}_users.csv")
 
 if __name__ == '__main__':
     main()

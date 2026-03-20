@@ -2,9 +2,10 @@
 Authentication routes with Flask-RESTX.
 """
 
+import uuid
 from datetime import datetime, timedelta
 
-from flask import request
+from flask import request, current_app
 from flask_jwt_extended import (
     create_access_token,
     create_refresh_token,
@@ -25,13 +26,15 @@ from app.utils.validators import validate_password_strength
 auth_ns = Namespace("auth", description="Authentication operations")
 
 # ============================================================================
-# Model Definitions (Auto-generated in Swagger)
+# Model Definitions
 # ============================================================================
 
 user_model = auth_ns.model(
     "User",
     {
-        "id": fields.Integer(description="User ID", example=1),
+        "id": fields.String(
+            description="User ID (UUID)", example="123e4567-e89b-12d3-a456-426614174000"
+        ),
         "username": fields.String(description="Username", example="johndoe"),
         "email": fields.String(description="Email address", example="john@example.com"),
         "first_name": fields.String(description="First name", example="John"),
@@ -172,7 +175,6 @@ class Register(Resource):
         },
     )
     @auth_ns.expect(register_model)
-    # Remove marshal_with to return custom structure
     def post(self):
         """Create a new user account"""
         data = request.json
@@ -204,7 +206,7 @@ class Register(Resource):
         db.session.add(user)
         db.session.commit()
 
-        # Generate tokens
+        # Generate tokens - user.id
         tokens = user.generate_auth_tokens()
 
         return {
@@ -225,7 +227,6 @@ class Login(Resource):
         },
     )
     @auth_ns.expect(login_model)
-    # Remove the marshal_with decorator since we're returning a custom structure
     def post(self):
         """Login and receive JWT tokens"""
         data = request.json
@@ -260,23 +261,46 @@ class Refresh(Resource):
     @jwt_required(refresh=True)
     def post(self):
         """Refresh access token"""
-        current_user_id = get_jwt_identity()
-        user = db.session.get(User, current_user_id)
+        try:
+            current_user_id = get_jwt_identity()
+            
+            if not current_user_id:
+                auth_ns.abort(HTTP_STATUS.UNAUTHORIZED, "Invalid token: No user identity")
+            
+            try:
+                user_uuid = uuid.UUID(current_user_id)
+            except ValueError as e:
+                auth_ns.abort(HTTP_STATUS.UNAUTHORIZED, f"Invalid user ID format: {str(e)}")
 
-        if not user or not user.is_active:
-            auth_ns.abort(HTTP_STATUS.UNAUTHORIZED, "User not found or inactive")
+            user = db.session.get(User, user_uuid)
 
-        # Create new access token
-        access_token = create_access_token(
-            identity=current_user_id,
-            additional_claims={
-                "username": user.username,
-                "role": user.role,
-                "is_admin": user.is_admin,
-            },
-        )
+            if not user:
+                auth_ns.abort(HTTP_STATUS.UNAUTHORIZED, "User not found")
 
-        return {"access_token": access_token}, HTTP_STATUS.OK
+            if not user.is_active:
+                auth_ns.abort(HTTP_STATUS.UNAUTHORIZED, "User account is inactive")
+
+            # Create new access token
+            access_token = create_access_token(
+                identity=str(user.id),
+                additional_claims={
+                    "username": user.username,
+                    "email": user.email,
+                    "role": user.role,
+                    "is_admin": user.is_admin,
+                    "user_id": str(user.id),
+                },
+                fresh=False,  # Refresh token should not be fresh
+            )
+
+            return {
+                "access_token": access_token,
+                "token_type": "bearer",
+                "expires_in": current_app.config.get("JWT_ACCESS_TOKEN_EXPIRES", 3600)
+            }, HTTP_STATUS.OK
+            
+        except Exception as e:
+            auth_ns.abort(HTTP_STATUS.UNAUTHORIZED, f"Token refresh failed: {str(e)}")
 
 
 @auth_ns.route("/logout")
@@ -295,10 +319,11 @@ class Logout(Resource):
 @auth_ns.route("/me")
 class Me(Resource):
     @auth_ns.doc(
-        description="Get current authenticated user information",
+        description="Update current user information",
         security="Bearer Auth",
         responses={
-            200: "User information retrieved",
+            200: "User updated successfully",
+            400: "Validation error",
             401: "Authentication required",
             404: "User not found",
         },
@@ -307,7 +332,12 @@ class Me(Resource):
     def get(self):
         """Get current user profile"""
         user_id = get_jwt_identity()
-        user = db.session.get(User, user_id)
+        try:
+            user_uuid = uuid.UUID(user_id)
+        except ValueError:
+            return {"error": "Invalid user ID format"}, HTTP_STATUS.BAD_REQUEST
+
+        user = db.session.get(User, user_uuid)
 
         if not user:
             return {"error": "User not found"}, HTTP_STATUS.NOT_FOUND
@@ -327,7 +357,12 @@ class Me(Resource):
     def put(self):
         """Update current user"""
         user_id = get_jwt_identity()
-        user = db.session.get(User, user_id)
+        try:
+            user_uuid = uuid.UUID(user_id)
+        except ValueError:
+            return {"error": "Invalid user ID format"}, HTTP_STATUS.BAD_REQUEST
+
+        user = db.session.get(User, user_uuid)
 
         if not user:
             return {"error": "User not found"}, HTTP_STATUS.NOT_FOUND
@@ -336,6 +371,7 @@ class Me(Resource):
 
         print(f"Received update data: {data}")
 
+        # Update basic fields
         if "first_name" in data:
             user.first_name = data["first_name"]
             print(f"Updated first_name to: {user.first_name}")
@@ -344,7 +380,33 @@ class Me(Resource):
             user.last_name = data["last_name"]
             print(f"Updated last_name to: {user.last_name}")
 
-        # Handle preferences update - FIXED VERSION with flag_modified
+        # Allow email update with validation
+        if "email" in data and data["email"]:
+            # Check if email is already taken by another user
+            existing_user = User.query.filter(
+                User.email == data["email"], User.id != user.id
+            ).first()
+            if existing_user:
+                return {
+                    "error": "Email already in use"
+                }, HTTP_STATUS.CONFLICT
+            user.email = data["email"]
+            print(f"Updated email to: {user.email}")
+
+        # Allow username update with validation
+        if "username" in data and data["username"]:
+            # Check if username is already taken by another user
+            existing_user = User.query.filter(
+                User.username == data["username"], User.id != user.id
+            ).first()
+            if existing_user:
+                return {
+                    "error": "Username already taken"
+                }, HTTP_STATUS.CONFLICT
+            user.username = data["username"]
+            print(f"Updated username to: {user.username}")
+
+        # Handle preferences update
         if "preferences" in data and data["preferences"] is not None:
             print(f"Preferences update requested: {data['preferences']}")
 
@@ -396,7 +458,12 @@ class ChangePassword(Resource):
     def post(self):
         """Change password"""
         user_id = get_jwt_identity()
-        user = db.session.get(User, user_id)
+        try:
+            user_uuid = uuid.UUID(user_id)
+        except ValueError:
+            return {"error": "Invalid user ID format"}, HTTP_STATUS.BAD_REQUEST
+
+        user = db.session.get(User, user_uuid)
         data = request.json
 
         if not user.check_password(data["current_password"]):
@@ -417,39 +484,77 @@ class ForgotPassword(Resource):
     @auth_ns.expect(password_reset_model)
     def post(self):
         """Request password reset"""
-        data = request.json
-        user = User.query.filter_by(email=data["email"]).first()
+        data = request.json or {}
+        
+        email = data.get("email")
+        
+        if not email:
+            auth_ns.abort(HTTP_STATUS.BAD_REQUEST, "Email is required")
+        
+        user = User.query.filter_by(email=email).first()
 
         if user:
             # Generate reset token
             token = user.generate_reset_token()
+            user.reset_token = token
+            user.reset_token_expires = datetime.utcnow() + timedelta(hours=24)  # 24 hour expiry
             db.session.commit()
             # TODO: Send email with token
+            print(f"Password reset token for {email}: {token}")
 
-        return {"message": "If email exists, reset link sent"}, HTTP_STATUS.OK
+        # Always return success to prevent email enumeration
+        return {"message": "If an account exists with this email, a password reset link has been sent"}, HTTP_STATUS.OK
 
 
 @auth_ns.route("/reset-password")
 class ResetPassword(Resource):
     @auth_ns.doc(
         description="Reset password with token",
+        params={
+            'token': 'Password reset token (required)',
+            'new_password': 'New password (required)'
+        },
         responses={200: "Password reset successful", 400: "Invalid or expired token"},
     )
     @auth_ns.expect(password_reset_confirm_model)
     def post(self):
         """Reset password"""
-        data = request.json
-
+        data = request.json or {}
+        
+        # Check for token in request body
+        token = data.get("token")
+        new_password = data.get("new_password")
+        
+        if not token:
+            auth_ns.abort(HTTP_STATUS.BAD_REQUEST, "Token is required")
+        
+        if not new_password:
+            auth_ns.abort(HTTP_STATUS.BAD_REQUEST, "New password is required")
+        
         # Find user by token
-        user = User.query.filter_by(reset_token=data["token"]).first()
+        user = User.query.filter_by(reset_token=token).first()
 
         if not user:
             auth_ns.abort(HTTP_STATUS.BAD_REQUEST, "Invalid token")
 
+        # Check if token is expired
         if user.reset_token_expires and user.reset_token_expires < datetime.utcnow():
+            # Clear expired token
+            user.reset_token = None
+            user.reset_token_expires = None
+            db.session.commit()
             auth_ns.abort(HTTP_STATUS.BAD_REQUEST, "Token expired")
 
-        user.set_password(data["new_password"])
+        # Validate new password strength
+        password_issues = validate_password_strength(new_password)
+        if password_issues:
+            return {
+                "error": "Validation error",
+                "details": {"new_password": password_issues},
+            }, HTTP_STATUS.BAD_REQUEST
+
+        # Set new password and clear reset token
+        user.set_password(new_password)
         user.reset_token = None
         user.reset_token_expires = None
         db.session.commit()
@@ -461,22 +566,36 @@ class ResetPassword(Resource):
 class VerifyEmail(Resource):
     @auth_ns.doc(
         description="Verify email address with token",
+        params={
+            'token': 'Email verification token (required)'
+        },
         responses={200: "Email verified successfully", 400: "Invalid or expired token"},
     )
     @auth_ns.expect(email_verify_model)
     def post(self):
         """Verify email"""
-        data = request.json
+        data = request.json or {}
+        
+        # Check for token in request body
+        token = data.get("token")
+        
+        if not token:
+            auth_ns.abort(HTTP_STATUS.BAD_REQUEST, "Verification token is required")
 
-        user = User.query.filter_by(verification_token=data["token"]).first()
+        user = User.query.filter_by(verification_token=token).first()
 
         if not user:
             auth_ns.abort(HTTP_STATUS.BAD_REQUEST, "Invalid token")
 
+        # Check if token is expired
         if (
             user.verification_token_expires
             and user.verification_token_expires < datetime.utcnow()
         ):
+            # Clear expired token
+            user.verification_token = None
+            user.verification_token_expires = None
+            db.session.commit()
             auth_ns.abort(HTTP_STATUS.BAD_REQUEST, "Token expired")
 
         user.email_verified = True
@@ -484,7 +603,7 @@ class VerifyEmail(Resource):
         user.verification_token_expires = None
         db.session.commit()
 
-        return {"message": "Email verified"}, HTTP_STATUS.OK
+        return {"message": "Email verified successfully"}, HTTP_STATUS.OK
 
 
 @auth_ns.route("/deactivate")
@@ -498,7 +617,12 @@ class Deactivate(Resource):
     def post(self):
         """Deactivate account"""
         user_id = get_jwt_identity()
-        user = User.query.get(user_id)
+        try:
+            user_uuid = uuid.UUID(user_id)
+        except ValueError:
+            return {"error": "Invalid user ID format"}, HTTP_STATUS.BAD_REQUEST
+
+        user = User.query.get(user_uuid)
 
         user.status = "inactive"
         db.session.commit()

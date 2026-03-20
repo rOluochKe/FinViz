@@ -2,6 +2,7 @@
 Transaction routes with Flask-RESTX.
 """
 
+import uuid
 from collections import defaultdict
 from datetime import datetime, timedelta
 
@@ -27,7 +28,10 @@ transactions_ns = Namespace("transactions", description="Transaction operations"
 category_info = transactions_ns.model(
     "CategoryInfo",
     {
-        "id": fields.Integer(description="Category ID"),
+        "id": fields.String(
+            description="Category ID (UUID)",
+            example="123e4567-e89b-12d3-a456-426614174000",
+        ),
         "name": fields.String(description="Category name"),
         "color": fields.String(description="Category color"),
     },
@@ -36,9 +40,17 @@ category_info = transactions_ns.model(
 transaction_model = transactions_ns.model(
     "Transaction",
     {
-        "id": fields.Integer(description="Transaction ID", example=1),
-        "user_id": fields.Integer(description="User ID", example=1),
-        "category_id": fields.Integer(description="Category ID", example=5),
+        "id": fields.String(
+            description="Transaction ID (UUID)",
+            example="123e4567-e89b-12d3-a456-426614174000",
+        ),
+        "user_id": fields.String(
+            description="User ID (UUID)", example="123e4567-e89b-12d3-a456-426614174000"
+        ),
+        "category_id": fields.String(
+            description="Category ID (UUID)",
+            example="123e4567-e89b-12d3-a456-426614174000",
+        ),
         "category_name": fields.String(
             description="Category name", example="Groceries"
         ),
@@ -84,8 +96,10 @@ transaction_model = transactions_ns.model(
 transaction_create_model = transactions_ns.model(
     "TransactionCreate",
     {
-        "category_id": fields.Integer(
-            required=True, description="Category ID", example=5, min=1
+        "category_id": fields.String(
+            required=True,
+            description="Category ID (UUID)",
+            example="123e4567-e89b-12d3-a456-426614174000",
         ),
         "amount": fields.Float(
             required=True, description="Transaction amount", example=45.67, min=0.01
@@ -132,7 +146,10 @@ transaction_create_model = transactions_ns.model(
 transaction_update_model = transactions_ns.model(
     "TransactionUpdate",
     {
-        "category_id": fields.Integer(description="Category ID", example=5),
+        "category_id": fields.String(
+            description="Category ID (UUID)",
+            example="123e4567-e89b-12d3-a456-426614174000",
+        ),
         "amount": fields.Float(
             description="Transaction amount", example=45.67, min=0.01
         ),
@@ -159,7 +176,10 @@ transaction_filter_model = transactions_ns.model(
             description="Start date filter", example="2024-01-01"
         ),
         "end_date": fields.Date(description="End date filter", example="2024-01-31"),
-        "category_id": fields.Integer(description="Category ID filter", example=5),
+        "category_id": fields.String(
+            description="Category ID (UUID)",
+            example="123e4567-e89b-12d3-a456-426614174000",
+        ),
         "type": fields.String(
             description="Transaction type filter",
             example="expense",
@@ -317,8 +337,8 @@ class TransactionList(Resource):
         return TransactionSchema().dump(transaction), HTTP_STATUS.CREATED
 
 
-@transactions_ns.route("/<int:transaction_id>")
-@transactions_ns.param("transaction_id", "Transaction ID")
+@transactions_ns.route("/<string:transaction_id>")  # Changed to string
+@transactions_ns.param("transaction_id", "Transaction ID (UUID)")
 class TransactionDetail(Resource):
     @transactions_ns.doc(
         description="Get transaction by ID",
@@ -335,9 +355,14 @@ class TransactionDetail(Resource):
         """Get specific transaction"""
         user_id = get_jwt_identity()
 
-        transaction = Transaction.query.filter_by(
-            id=transaction_id, user_id=user_id
-        ).first()
+        try:
+            tx_uuid = uuid.UUID(transaction_id)
+        except ValueError:
+            transactions_ns.abort(
+                HTTP_STATUS.BAD_REQUEST, "Invalid transaction ID format"
+            )
+
+        transaction = Transaction.query.filter_by(id=tx_uuid, user_id=user_id).first()
 
         if not transaction:
             transactions_ns.abort(HTTP_STATUS.NOT_FOUND, "Transaction not found")
@@ -362,9 +387,14 @@ class TransactionDetail(Resource):
         user_id = get_jwt_identity()
         data = request.json
 
-        transaction = Transaction.query.filter_by(
-            id=transaction_id, user_id=user_id
-        ).first()
+        try:
+            tx_uuid = uuid.UUID(transaction_id)
+        except ValueError:
+            transactions_ns.abort(
+                HTTP_STATUS.BAD_REQUEST, "Invalid transaction ID format"
+            )
+
+        transaction = Transaction.query.filter_by(id=tx_uuid, user_id=user_id).first()
 
         if not transaction:
             transactions_ns.abort(HTTP_STATUS.NOT_FOUND, "Transaction not found")
@@ -394,9 +424,14 @@ class TransactionDetail(Resource):
         """Delete transaction"""
         user_id = get_jwt_identity()
 
-        transaction = Transaction.query.filter_by(
-            id=transaction_id, user_id=user_id
-        ).first()
+        try:
+            tx_uuid = uuid.UUID(transaction_id)
+        except ValueError:
+            transactions_ns.abort(
+                HTTP_STATUS.BAD_REQUEST, "Invalid transaction ID format"
+            )
+
+        transaction = Transaction.query.filter_by(id=tx_uuid, user_id=user_id).first()
 
         if not transaction:
             transactions_ns.abort(HTTP_STATUS.NOT_FOUND, "Transaction not found")
@@ -439,8 +474,13 @@ class BulkCreate(Resource):
         errors = []
 
         for idx, tx_data in enumerate(data["transactions"]):
-            # Use db.session.get() instead of query.get() for SQLAlchemy 2.0
-            category = db.session.get(Category, tx_data["category_id"])
+            try:
+                category_uuid = uuid.UUID(tx_data["category_id"])
+            except ValueError:
+                errors.append({"index": idx, "error": "Invalid category ID format"})
+                continue
+
+            category = db.session.get(Category, category_uuid)
             if not category:
                 errors.append({"index": idx, "error": "Category not found"})
                 continue

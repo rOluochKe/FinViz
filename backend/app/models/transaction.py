@@ -2,10 +2,11 @@
 Transaction model for financial transactions.
 """
 
+import uuid
 from datetime import datetime
 
 from sqlalchemy import CheckConstraint, Index, func, text
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 
 from app.extensions import db
 
@@ -17,17 +18,20 @@ class Transaction(db.Model):
 
     __tablename__ = "transactions"
 
-    id = db.Column(db.Integer, primary_key=True)
+    # Primary key - using UUID
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
 
     # Foreign keys
     user_id = db.Column(
-        db.Integer,
+        UUID(as_uuid=True),
         db.ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
     category_id = db.Column(
-        db.Integer, db.ForeignKey("categories.id", ondelete="SET NULL"), index=True
+        UUID(as_uuid=True),
+        db.ForeignKey("categories.id", ondelete="SET NULL"),
+        index=True,
     )
 
     # Transaction data
@@ -48,7 +52,7 @@ class Transaction(db.Model):
     recurring_frequency = db.Column(db.String(20))  # daily, weekly, monthly, yearly
     recurring_end_date = db.Column(db.Date)
     parent_transaction_id = db.Column(
-        db.Integer, db.ForeignKey("transactions.id"), index=True
+        UUID(as_uuid=True), db.ForeignKey("transactions.id"), index=True
     )
 
     # Additional metadata - renamed from 'metadata' to avoid reserved name
@@ -64,8 +68,8 @@ class Transaction(db.Model):
     child_transactions = db.relationship(
         "Transaction", backref=db.backref("parent", remote_side=[id]), lazy="dynamic"
     )
-    # Add back_populates to match category
     category = db.relationship("Category", back_populates="transactions")
+    user = db.relationship("User", back_populates="transactions")
 
     # Indexes for performance
     __table_args__ = (
@@ -123,20 +127,7 @@ class Transaction(db.Model):
         transaction_type=None,
         search=None,
     ):
-        """
-        Get transactions for a user with optional filters.
-
-        Args:
-            user_id: User ID
-            start_date: Start date filter
-            end_date: End date filter
-            category_id: Category filter
-            transaction_type: Type filter
-            search: Search in description
-
-        Returns:
-            Query: Filtered transaction query
-        """
+        """Get transactions for a user with optional filters."""
         query = cls.query.filter_by(user_id=user_id)
 
         if start_date:
@@ -159,18 +150,7 @@ class Transaction(db.Model):
 
     @classmethod
     def get_monthly_summary(cls, user_id, year, month):
-        """
-        Get monthly summary for a user.
-
-        Args:
-            user_id: User ID
-            year: Year
-            month: Month
-
-        Returns:
-            dict: Monthly summary
-        """
-
+        """Get monthly summary for a user."""
         start_date = datetime(year, month, 1).date()
         if month == 12:
             end_date = datetime(year + 1, 1, 1).date()
@@ -204,18 +184,7 @@ class Transaction(db.Model):
     def get_category_breakdown(
         cls, user_id, start_date=None, end_date=None, transaction_type="expense"
     ):
-        """
-        Get transaction breakdown by category.
-
-        Args:
-            user_id: User ID
-            start_date: Start date
-            end_date: End date
-            transaction_type: Type of transactions
-
-        Returns:
-            list: Category breakdown
-        """
+        """Get transaction breakdown by category."""
         query = """
             SELECT 
                 c.name as category_name,
@@ -228,7 +197,7 @@ class Transaction(db.Model):
                 AND t.type = :tx_type
         """
 
-        params = {"user_id": user_id, "tx_type": transaction_type}
+        params = {"user_id": str(user_id), "tx_type": transaction_type}
 
         if start_date:
             query += " AND t.date >= :start_date"
@@ -256,19 +225,11 @@ class Transaction(db.Model):
         ]
 
     def to_dict(self, include_relationships=True):
-        """
-        Convert transaction to dictionary.
-
-        Args:
-            include_relationships: Include related data
-
-        Returns:
-            dict: Transaction data
-        """
+        """Convert transaction to dictionary."""
         data = {
-            "id": self.id,
-            "user_id": self.user_id,
-            "category_id": self.category_id,
+            "id": str(self.id),
+            "user_id": str(self.user_id) if self.user_id else None,
+            "category_id": str(self.category_id) if self.category_id else None,
             "amount": float(self.amount),
             "description": self.description,
             "date": self.date.isoformat() if self.date else None,
@@ -291,7 +252,7 @@ class Transaction(db.Model):
         if include_relationships and self.category_id:
             result = db.session.execute(
                 text("SELECT name, color FROM categories WHERE id = :id"),
-                {"id": self.category_id},
+                {"id": str(self.category_id)},
             ).first()
             if result:
                 data["category_name"] = result.name

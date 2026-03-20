@@ -2,45 +2,28 @@
 Monthly statistics model for pre-aggregated data.
 """
 
+import uuid
 from datetime import date, datetime
 
 from sqlalchemy import CheckConstraint, Index, func, text
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 
 from app.extensions import db
-from app.models.category import Category
-from app.models.transaction import Transaction
 
 
 class MonthlyStat(db.Model):
     """
     Monthly statistics model for pre-aggregated dashboard data.
-
-    Attributes:
-        id: Primary key
-        user_id: Reference to user
-        year: Year
-        month: Month (1-12)
-        total_income: Total income for month
-        total_expense: Total expense for month
-        net_savings: Income - Expense
-        top_categories: JSONB of top spending categories
-        category_breakdown: JSONB of all category spending
-        transaction_count: Number of transactions
-        average_transaction: Average transaction amount
-        best_day: Day with lowest spending
-        worst_day: Day with highest spending
-        created_at: Timestamp
-        updated_at: Timestamp
     """
 
     __tablename__ = "monthly_stats"
 
-    id = db.Column(db.Integer, primary_key=True)
+    # Primary key - using UUID
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
 
     # Foreign keys
     user_id = db.Column(
-        db.Integer,
+        UUID(as_uuid=True),
         db.ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
@@ -74,6 +57,9 @@ class MonthlyStat(db.Model):
         db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
     )
 
+    # Relationships
+    user = db.relationship("User", back_populates="monthly_stats")
+
     # Indexes and constraints
     __table_args__ = (
         db.UniqueConstraint(
@@ -106,14 +92,13 @@ class MonthlyStat(db.Model):
         Generate monthly statistics for a user.
 
         Args:
-            user_id: User ID
+            user_id: User ID (UUID)
             year: Year
             month: Month
 
         Returns:
             MonthlyStat: Generated statistics
         """
-
         # Calculate date range
         start_date = date(year, month, 1)
         if month == 12:
@@ -156,7 +141,7 @@ class MonthlyStat(db.Model):
                 GROUP BY c.id, c.name, c.color
                 ORDER BY total DESC
             """),
-            {"user_id": user_id, "start_date": start_date, "end_date": end_date},
+            {"user_id": str(user_id), "start_date": start_date, "end_date": end_date},
         ).fetchall()
 
         category_breakdown = [
@@ -187,7 +172,7 @@ class MonthlyStat(db.Model):
                     AND type = 'expense'
                 GROUP BY date
             """),
-            {"user_id": user_id, "start_date": start_date, "end_date": end_date},
+            {"user_id": str(user_id), "start_date": start_date, "end_date": end_date},
         ).fetchall()
 
         best_day = None
@@ -231,8 +216,8 @@ class MonthlyStat(db.Model):
             dict: Statistics data
         """
         return {
-            "id": self.id,
-            "user_id": self.user_id,
+            "id": str(self.id),
+            "user_id": str(self.user_id) if self.user_id else None,
             "year": self.year,
             "month": self.month,
             "total_income": float(self.total_income) if self.total_income else 0,
@@ -259,3 +244,7 @@ class MonthlyStat(db.Model):
 
     def __repr__(self):
         return f"<MonthlyStat {self.year}-{self.month}: ${self.total_income}/${self.total_expense}>"
+
+
+# Import at the end to avoid circular imports
+from app.models.transaction import Transaction

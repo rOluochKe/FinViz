@@ -27,7 +27,7 @@ class TimeSeriesSchema(Schema):
 class CategoryBreakdownItemSchema(Schema):
     """Schema for category breakdown items."""
 
-    category_id = fields.Integer(required=True)
+    category_id = fields.UUID(required=True)
     category_name = fields.String(required=True)
     color = fields.String(required=True)
     icon = fields.String(allow_none=True)
@@ -91,8 +91,8 @@ class DashboardSummarySchema(Schema):
 class MonthlyStatsSchema(Schema):
     """Schema for monthly statistics."""
 
-    id = fields.Integer(dump_only=True)
-    user_id = fields.Integer(required=True)
+    id = fields.UUID(dump_only=True)
+    user_id = fields.UUID(required=True)
     year = fields.Integer(required=True, validate=validate.Range(min=2000, max=2100))
     month = fields.Integer(required=True, validate=validate.Range(min=1, max=12))
     month_name = fields.String(dump_only=True)
@@ -122,7 +122,7 @@ class AnalyticsFilterSchema(Schema):
     type = fields.String(
         validate=validate.OneOf(["income", "expense", "all"]), load_default="all"
     )
-    categories = fields.List(fields.Integer(), load_default=[])
+    categories = fields.List(fields.UUID(), load_default=[])
 
     @pre_load
     def validate_dates(self, data, **kwargs):
@@ -181,7 +181,7 @@ class InsightSchema(Schema):
 class AnomalySchema(Schema):
     """Schema for anomaly detection."""
 
-    transaction_id = fields.Integer(allow_none=True)
+    transaction_id = fields.UUID(allow_none=True)
     date = fields.String()
     amount = fields.Float()
     description = fields.String()

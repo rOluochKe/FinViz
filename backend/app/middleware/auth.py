@@ -29,7 +29,10 @@ def setup_jwt_callbacks(app, jwt):
         """Load user from JWT identity."""
         identity = jwt_data["sub"]
         try:
-            return db.session.get(User, int(identity))
+            import uuid
+
+            user_uuid = uuid.UUID(identity)
+            return db.session.get(User, user_uuid)
         except (ValueError, TypeError):
             return None
 
@@ -42,7 +45,7 @@ def setup_jwt_callbacks(app, jwt):
                 "email": user.email,
                 "role": user.role,
                 "is_admin": user.is_admin,
-                "user_id": user.id,
+                "user_id": str(user.id),
             }
         return {}
 
@@ -189,7 +192,10 @@ def get_current_user():
     try:
         user_id = get_jwt_identity()
         if user_id:
-            return db.session.get(User, int(user_id))
+            import uuid
+
+            user_uuid = uuid.UUID(user_id)
+            return db.session.get(User, user_uuid)
     except (ValueError, TypeError):
         pass
     return None
@@ -200,22 +206,30 @@ def verify_ownership(resource_user_id):
     Verify that the current user owns the resource or is admin.
 
     Args:
-        resource_user_id: User ID of the resource owner
+        resource_user_id: User ID of the resource owner (UUID or string)
 
     Returns:
         bool: True if user owns resource or is admin
     """
 
     try:
-        current_user_id = int(get_jwt_identity())
+        current_user_id_str = get_jwt_identity()
         claims = get_jwt()
 
         # Admin can access any resource
         if claims.get("is_admin", False):
             return True
 
-        # User must own the resource
-        return current_user_id == resource_user_id
+        # Convert UUIDs to strings for comparison
+        if current_user_id_str and resource_user_id:
+            # Handle UUID objects or strings
+            current_user_str = str(current_user_id_str)
+            resource_user_str = str(resource_user_id)
+
+            # User must own the resource
+            return current_user_str == resource_user_str
+
+        return False
 
     except (ValueError, TypeError):
         return False

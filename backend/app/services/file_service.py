@@ -51,14 +51,14 @@ class FileService:
         """Check if mimetype is allowed."""
         return mimetype in FileService.ALLOWED_MIMETYPES
 
-    def save_receipt(self, file: BinaryIO, filename: str, user_id: int) -> Dict:
+    def save_receipt(self, file: BinaryIO, filename: str, user_id: uuid.UUID) -> Dict:
         """
         Save receipt file locally.
 
         Args:
             file: File object
             filename: Original filename
-            user_id: User ID
+            user_id: User ID (UUID)
 
         Returns:
             Dict with file info
@@ -81,12 +81,12 @@ class FileService:
             "url": f"/uploads/{path.relative_to(self.base)}",
         }
 
-    def get_receipt(self, filename: str, user_id: int) -> Optional[Path]:
+    def get_receipt(self, filename: str, user_id: uuid.UUID) -> Optional[Path]:
         """Get receipt file path."""
         path = self.receipts / str(user_id) / filename
         return path if path.exists() and path.is_file() else None
 
-    def delete_receipt(self, filename: str, user_id: int) -> bool:
+    def delete_receipt(self, filename: str, user_id: uuid.UUID) -> bool:
         """Delete receipt file."""
         path = self.get_receipt(filename, user_id)
         if path:
@@ -94,14 +94,14 @@ class FileService:
             return True
         return False
 
-    def save_export(self, data: bytes, filename: str, user_id: int) -> Dict:
+    def save_export(self, data: bytes, filename: str, user_id: uuid.UUID) -> Dict:
         """
         Save export file.
 
         Args:
             data: File data
             filename: Desired filename
-            user_id: User ID
+            user_id: User ID (UUID)
 
         Returns:
             Dict with file info
@@ -121,15 +121,10 @@ class FileService:
             "url": f"/uploads/{path.relative_to(self.base)}",
         }
 
-    def get_export_path(self, filename, user_id):
-        """
-        Returns the full path to the export file for the given user and filename.
-        """
-        export_dir = Path("exports") / str(user_id)
-        file_path = export_dir / filename
-        if file_path.exists():
-            return file_path
-        return None
+    def get_export_path(self, filename: str, user_id: uuid.UUID) -> Optional[Path]:
+        """Get export file path."""
+        path = self.exports / str(user_id) / filename
+        return path if path.exists() and path.is_file() else None
 
     def save_temp(self, file: BinaryIO, filename: str) -> Dict:
         """Save temporary file."""
@@ -158,7 +153,7 @@ class FileService:
 
         return deleted
 
-    def get_user_usage(self, user_id: int) -> Dict:
+    def get_user_usage(self, user_id: uuid.UUID) -> Dict:
         """Get storage usage for user."""
         receipts = self.receipts / str(user_id)
         exports = self.exports / str(user_id)

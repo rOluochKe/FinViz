@@ -4,6 +4,7 @@ Import service for importing data from various sources.
 
 import csv
 import json
+import uuid
 from datetime import datetime
 from typing import Dict, List, Tuple
 
@@ -53,13 +54,13 @@ class ImportService:
         return df.to_dict("records")
 
     @staticmethod
-    def validate_transaction(record: Dict, user_id: int) -> Tuple[bool, str]:
+    def validate_transaction(record: Dict, user_id: uuid.UUID) -> Tuple[bool, str]:
         """
         Validate a transaction record.
 
         Args:
             record: Transaction data
-            user_id: User ID
+            user_id: User ID (UUID)
 
         Returns:
             (is_valid, error_message)
@@ -96,14 +97,14 @@ class ImportService:
 
     @staticmethod
     def import_transactions(
-        records: List[Dict], user_id: int, dry_run: bool = False
+        records: List[Dict], user_id: uuid.UUID, dry_run: bool = False
     ) -> Dict:
         """
         Import transactions from records.
 
         Args:
             records: List of transaction records
-            user_id: User ID
+            user_id: User ID (UUID)
             dry_run: Validate without importing
 
         Returns:

@@ -2,7 +2,10 @@
 Report routes with Flask-RESTX.
 """
 
+import uuid
+import logging
 from datetime import datetime
+from functools import wraps
 
 from flask import request, send_file
 from flask_jwt_extended import get_jwt_identity, jwt_required
@@ -15,6 +18,29 @@ from app.utils.constants import HTTP_STATUS
 
 # Create namespace
 reports_ns = Namespace("reports", description="Financial report operations")
+
+logger = logging.getLogger(__name__)
+
+# ============================================================================
+# Helper Decorator for Safe Caching
+# ============================================================================
+
+def safe_cache_cached(timeout=300):
+    """
+    Decorator that safely handles cache unavailability.
+    If Redis is not available, it skips caching and executes the function directly.
+    """
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            try:
+                # Try to use cache if available
+                return cache.cached(timeout=timeout)(f)(*args, **kwargs)
+            except Exception as e:
+                logger.debug(f"Cache unavailable, skipping cache: {str(e)}")
+                return f(*args, **kwargs)
+        return decorated_function
+    return decorator
 
 # ============================================================================
 # Model Definitions
@@ -170,7 +196,7 @@ class MonthlyReport(Resource):
     )
     @reports_ns.marshal_with(monthly_report_model)
     @jwt_required()
-    @cache.cached(timeout=300)
+    @safe_cache_cached(timeout=300)  # Use safe cache decorator
     def get(self, year, month):
         """Get monthly report"""
         if month < 1 or month > 12:
@@ -195,7 +221,7 @@ class YearlyReport(Resource):
     )
     @reports_ns.marshal_with(yearly_report_model)
     @jwt_required()
-    @cache.cached(timeout=600)
+    @safe_cache_cached(timeout=600)  # Use safe cache decorator
     def get(self, year):
         """Get yearly report"""
         user_id = get_jwt_identity()
@@ -208,8 +234,8 @@ class YearlyReport(Resource):
         return report
 
 
-@reports_ns.route("/category/<int:category_id>")
-@reports_ns.param("category_id", "Category ID", required=True)
+@reports_ns.route("/category/<string:category_id>")
+@reports_ns.param("category_id", "Category ID (UUID)", required=True)
 class CategoryReport(Resource):
     @reports_ns.doc(
         description="Get detailed report for a specific category",
@@ -239,7 +265,12 @@ class CategoryReport(Resource):
         if months < 1 or months > 36:
             reports_ns.abort(HTTP_STATUS.BAD_REQUEST, "Months must be between 1 and 36")
 
-        report = ReportService.category_report(user_id, category_id, months)
+        try:
+            category_uuid = uuid.UUID(category_id)
+        except ValueError:
+            reports_ns.abort(HTTP_STATUS.BAD_REQUEST, "Invalid category ID format. Must be a valid UUID.")
+
+        report = ReportService.category_report(user_id, category_uuid, months)
 
         if isinstance(report, dict) and "error" in report:
             reports_ns.abort(HTTP_STATUS.NOT_FOUND, report["error"])
@@ -399,6 +430,7 @@ class AvailableReports(Resource):
         responses={200: "Available reports retrieved"},
     )
     @jwt_required()
+    @safe_cache_cached(timeout=3600)  # Cache for 1 hour, handles Redis failure
     def get(self):
         """Get available report types"""
         return {
@@ -443,7 +475,7 @@ class YearSummary(Resource):
         responses={200: "Summary retrieved"},
     )
     @jwt_required()
-    @cache.cached(timeout=300)
+    @safe_cache_cached(timeout=300) 
     def get(self, year):
         """Get year summary"""
         user_id = get_jwt_identity()

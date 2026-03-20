@@ -4,6 +4,7 @@ Admin routes for system management with Flask-RESTX.
 
 import os
 import subprocess
+import uuid
 from datetime import datetime
 
 import psutil
@@ -47,10 +48,12 @@ cache_stats_model = admin_ns.model(
         "backend": fields.String(
             description="Cache backend type", example="RedisCache"
         ),
-        "hits": fields.Integer(description="Cache hits", example=1500),
-        "misses": fields.Integer(description="Cache misses", example=200),
-        "memory": fields.String(description="Memory usage", example="2.5M"),
-        "keys": fields.Integer(description="Total keys", example=350),
+        "hits": fields.Integer(description="Cache hits", example=1500, allow_null=True),
+        "misses": fields.Integer(description="Cache misses", example=200, allow_null=True),
+        "memory": fields.String(description="Memory usage", example="2.5M", allow_null=True),
+        "keys": fields.Integer(description="Total keys", example=350, allow_null=True),
+        "available": fields.Boolean(description="Is cache available", example=True),
+        "error": fields.String(description="Error message if any", allow_null=True),
     },
 )
 
@@ -67,7 +70,9 @@ disk_usage_model = admin_ns.model(
 user_usage_model = admin_ns.model(
     "UserUsage",
     {
-        "user_id": fields.Integer(description="User ID", example=1),
+        "user_id": fields.String(
+            description="User ID (UUID)", example="123e4567-e89b-12d3-a456-426614174000"
+        ),
         "usage": fields.Raw(description="User storage usage details"),
     },
 )
@@ -147,7 +152,6 @@ class SystemStats(Resource):
     @admin_required
     def get(self):
         """Get system statistics"""
-
         stats = {
             "users": db.session.execute(text("SELECT COUNT(*) FROM users")).scalar()
             or 0,
@@ -162,7 +166,6 @@ class SystemStats(Resource):
             "budgets": db.session.execute(text("SELECT COUNT(*) FROM budgets")).scalar()
             or 0,
         }
-
         return stats
 
 
@@ -177,13 +180,60 @@ class CacheStats(Resource):
             403: "Admin access required",
         },
     )
-    @admin_ns.marshal_with(cache_stats_model)
     @jwt_required()
     @admin_required
     def get(self):
-        """Get cache statistics"""
-        stats = CacheService.get_stats()
-        return stats
+        """Get cache statistics with graceful Redis failure handling"""
+        try:
+            # Try to get cache stats from Redis
+            stats = CacheService.get_stats()
+            
+            # Check if stats contains error
+            if stats and stats.get("error"):
+                return {
+                    "backend": "RedisCache",
+                    "available": False,
+                    "error": stats.get("error"),
+                    "hits": None,
+                    "misses": None,
+                    "memory": None,
+                    "keys": None,
+                }
+            
+            # If stats is None or empty, return fallback
+            if not stats:
+                return {
+                    "backend": "RedisCache",
+                    "available": False,
+                    "error": "Cache is not available",
+                    "hits": None,
+                    "misses": None,
+                    "memory": None,
+                    "keys": None,
+                }
+            
+            # Return the stats with proper values
+            return {
+                "backend": stats.get("backend", "RedisCache"),
+                "available": True,
+                "hits": stats.get("hits", 0),
+                "misses": stats.get("misses", 0),
+                "memory": stats.get("memory", "0"),
+                "keys": stats.get("keys", 0),
+                "error": None,
+            }
+            
+        except Exception as e:
+            current_app.logger.error(f"Error getting cache stats: {str(e)}")
+            return {
+                "backend": "RedisCache",
+                "available": False,
+                "error": str(e),
+                "hits": None,
+                "misses": None,
+                "memory": None,
+                "keys": None,
+            }
 
     @admin_ns.doc(
         description="Clear all cache",
@@ -207,9 +257,15 @@ class CacheStats(Resource):
     @jwt_required()
     @admin_required
     def delete(self):
-        """Clear all cache"""
-        cache.clear()
-        return {"message": "Cache cleared"}
+        """Clear all cache with graceful Redis failure handling"""
+        try:
+            # Try to clear cache
+            cache.clear()
+            return {"message": "Cache cleared successfully"}
+        except Exception as e:
+            current_app.logger.error(f"Error clearing cache: {str(e)}")
+            # Return a friendly message even if Redis is unavailable
+            return {"message": "Cache not available (Redis not connected)"}, HTTP_STATUS.OK
 
 
 @admin_ns.route("/storage")
@@ -233,16 +289,17 @@ class StorageStats(Resource):
         # Get disk usage
         disk = psutil.disk_usage("/")
 
-        # Get all users' storage
-        users = db.session.execute(text("SELECT id FROM users")).fetchall()
+        # Get all users
+        users = db.session.execute(text("SELECT id::text FROM users")).fetchall()
         total_users = len(users)
 
         user_storage = []
         total_size = 0
 
         for user in users:
-            usage = file_service.get_user_usage(user[0])
-            user_storage.append({"user_id": user[0], "usage": usage})
+            user_uuid = uuid.UUID(user[0])
+            usage = file_service.get_user_usage(user_uuid)
+            user_storage.append({"user_id": str(user_uuid), "usage": usage})
             total_size += usage["total"]["size"]
 
         return {
@@ -312,11 +369,15 @@ class Logs(Resource):
         if not os.path.exists(log_file):
             return {"logs": [], "total": 0, "showing": 0}
 
-        with open(log_file, "r") as f:
-            all_lines = f.readlines()
-            last_lines = all_lines[-lines:]
+        try:
+            with open(log_file, "r") as f:
+                all_lines = f.readlines()
+                last_lines = all_lines[-lines:]
 
-        return {"logs": last_lines, "total": len(all_lines), "showing": len(last_lines)}
+            return {"logs": last_lines, "total": len(all_lines), "showing": len(last_lines)}
+        except Exception as e:
+            current_app.logger.error(f"Error reading log file: {str(e)}")
+            return {"logs": [], "total": 0, "showing": 0, "error": str(e)}
 
 
 @admin_ns.route("/env")
@@ -342,12 +403,26 @@ class Environment(Resource):
         else:
             db_display = db_uri
 
+        # Get cache type safely
+        cache_type = current_app.config.get("CACHE_TYPE", "none")
+        if cache_type == "redis" and not self._is_redis_available():
+            cache_type = "redis (unavailable)"
+
         return {
             "environment": current_app.config["FLASK_ENV"],
             "debug": current_app.config["DEBUG"],
             "database": db_display,
-            "cache": current_app.config.get("CACHE_TYPE", "none"),
+            "cache": cache_type,
         }
+
+    def _is_redis_available(self):
+        """Check if Redis is available"""
+        try:
+            cache.set("test", "test", timeout=1)
+            cache.get("test")
+            return True
+        except Exception:
+            return False
 
 
 @admin_ns.route("/migrate")
@@ -408,7 +483,6 @@ class SystemHealth(Resource):
     @admin_required
     def get(self):
         """Get detailed system health"""
-        from sqlalchemy import text
 
         status = {
             "status": "healthy",
@@ -424,14 +498,17 @@ class SystemHealth(Resource):
             status["components"]["database"] = {"status": "unhealthy", "error": str(e)}
             status["status"] = "degraded"
 
-        # Cache check
+        # Cache check - handle gracefully
         try:
             cache.set("health_check", "ok", timeout=5)
             cache.get("health_check")
             status["components"]["cache"] = {"status": "healthy"}
         except Exception as e:
-            status["components"]["cache"] = {"status": "unhealthy", "error": str(e)}
-            status["status"] = "degraded"
+            status["components"]["cache"] = {
+                "status": "unavailable", 
+                "error": "Redis not available - caching disabled"
+            }
+            # Don't degrade overall status for cache failure
 
         # Disk space check
         try:
@@ -442,6 +519,8 @@ class SystemHealth(Resource):
                 "free_gb": round(free_gb, 2),
                 "total_gb": round(disk.total / (1024**3), 2),
             }
+            if free_gb <= 1:
+                status["status"] = "degraded"
         except Exception as e:
             status["components"]["disk"] = {"status": "unknown", "error": str(e)}
 
@@ -454,6 +533,8 @@ class SystemHealth(Resource):
                 "available_gb": round(memory.available / (1024**3), 2),
                 "total_gb": round(memory.total / (1024**3), 2),
             }
+            if memory.percent >= 90:
+                status["status"] = "degraded"
         except Exception as e:
             status["components"]["memory"] = {"status": "unknown", "error": str(e)}
 

@@ -5,6 +5,7 @@ Export service for generating exports in various formats.
 import csv
 import io
 import json
+import uuid
 from datetime import datetime
 from typing import Dict, List
 

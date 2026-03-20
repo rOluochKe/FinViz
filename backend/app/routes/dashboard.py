@@ -2,8 +2,11 @@
 Dashboard routes with Flask-RESTX.
 """
 
+import uuid
+import logging
 from collections import defaultdict
 from datetime import date, datetime, timedelta
+from functools import wraps
 
 from flask import request
 from flask_jwt_extended import get_jwt_identity, jwt_required
@@ -45,7 +48,10 @@ kpis_model = dashboard_ns.model(
 recent_transaction_model = dashboard_ns.model(
     "RecentTransaction",
     {
-        "id": fields.Integer(description="Transaction ID"),
+        "id": fields.String(
+            description="Transaction ID (UUID)",
+            example="123e4567-e89b-12d3-a456-426614174000",
+        ),
         "date": fields.String(description="Date"),
         "desc": fields.String(description="Description"),
         "amount": fields.Float(description="Amount"),
@@ -105,7 +111,10 @@ dashboard_summary_model = dashboard_ns.model(
 upcoming_transaction_model = dashboard_ns.model(
     "UpcomingTransaction",
     {
-        "id": fields.Integer(description="Transaction ID"),
+        "id": fields.String(
+            description="Transaction ID (UUID)",
+            example="123e4567-e89b-12d3-a456-426614174000",
+        ),
         "desc": fields.String(description="Description"),
         "amount": fields.Float(description="Amount"),
         "type": fields.String(description="Type"),
@@ -137,6 +146,29 @@ net_worth_model = dashboard_ns.model(
 )
 
 # ============================================================================
+# Helper Decorator
+# ============================================================================
+
+def safe_cache_cached(timeout=60):
+    """
+    Decorator that safely handles cache unavailability.
+    If Redis is not available, it skips caching and executes the function directly.
+    """
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            try:
+                # Try to use cache if available
+                return cache.cached(timeout=timeout)(f)(*args, **kwargs)
+            except Exception as e:
+                # If cache fails (Redis not available), just execute the function directly
+                # Log the error at debug level to avoid noise
+                logging.getLogger(__name__).debug(f"Cache unavailable: {str(e)}")
+                return f(*args, **kwargs)
+        return decorated_function
+    return decorator
+
+# ============================================================================
 # API Endpoints
 # ============================================================================
 
@@ -151,7 +183,7 @@ class DashboardSummary(Resource):
     @dashboard_ns.param("days", "Days to analyze", type="integer", default=30)
     @dashboard_ns.marshal_with(dashboard_summary_model)
     @jwt_required()
-    @cache.cached(timeout=60)
+    @safe_cache_cached(timeout=60)
     def get(self):
         """Get full dashboard data"""
         user_id = get_jwt_identity()
@@ -171,7 +203,7 @@ class DashboardKPIs(Resource):
     @dashboard_ns.param("days", "Days to analyze", type="integer", default=30)
     @dashboard_ns.marshal_with(kpis_model)
     @jwt_required()
-    @cache.cached(timeout=60)
+    @safe_cache_cached(timeout=60)
     def get(self):
         """Get KPIs only"""
         user_id = get_jwt_identity()
@@ -210,7 +242,7 @@ class SpendingByCategory(Resource):
     @dashboard_ns.param("days", "Days to analyze", type="integer", default=30)
     @dashboard_ns.marshal_list_with(category_spending_model)
     @jwt_required()
-    @cache.cached(timeout=300)
+    @safe_cache_cached(timeout=300)
     def get(self):
         """Get spending by category"""
         user_id = get_jwt_identity()
@@ -230,7 +262,7 @@ class MonthlyTrends(Resource):
     @dashboard_ns.param("months", "Number of months", type="integer", default=6)
     @dashboard_ns.marshal_with(trends_model)
     @jwt_required()
-    @cache.cached(timeout=300)
+    @safe_cache_cached(timeout=300)
     def get(self):
         """Get monthly trends"""
         user_id = get_jwt_identity()
@@ -319,7 +351,7 @@ class UpcomingTransactions(Resource):
             if 0 <= days <= 30:
                 upcoming.append(
                     {
-                        "id": tx.id,
+                        "id": str(tx.id),
                         "desc": tx.description,
                         "amount": float(tx.amount),
                         "type": tx.type,
@@ -341,7 +373,7 @@ class NetWorth(Resource):
     )
     @dashboard_ns.marshal_with(net_worth_model)
     @jwt_required()
-    @cache.cached(timeout=3600)
+    @safe_cache_cached(timeout=3600)
     def get(self):
         """Get net worth history"""
         user_id = get_jwt_identity()

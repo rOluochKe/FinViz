@@ -2,6 +2,8 @@
 User management routes with Flask-RESTX.
 """
 
+import uuid
+
 from flask import request
 from flask_jwt_extended import get_jwt_identity, jwt_required
 from flask_restx import Namespace, Resource, fields
@@ -10,7 +12,7 @@ from app.extensions import db
 from app.models.user import User
 from app.schemas.user_schema import UserSchema
 from app.utils.constants import HTTP_STATUS
-from app.utils.decorators import admin_required, paginate
+from app.utils.decorators import admin_required
 
 # Create namespace
 users_ns = Namespace("users", description="User management operations (admin only)")
@@ -22,7 +24,9 @@ users_ns = Namespace("users", description="User management operations (admin onl
 user_model = users_ns.model(
     "User",
     {
-        "id": fields.Integer(description="User ID", example=1),
+        "id": fields.String(
+            description="User ID (UUID)", example="123e4567-e89b-12d3-a456-426614174000"
+        ),
         "username": fields.String(description="Username", example="johndoe"),
         "email": fields.String(description="Email address", example="john@example.com"),
         "first_name": fields.String(description="First name", example="John"),
@@ -113,8 +117,8 @@ class UserList(Resource):
         }
 
 
-@users_ns.route("/<int:user_id>")
-@users_ns.param("user_id", "User ID")
+@users_ns.route("/<string:user_id>")
+@users_ns.param("user_id", "User ID (UUID)")
 class UserDetail(Resource):
     @users_ns.doc(
         description="Get user by ID (admin only)",
@@ -131,7 +135,12 @@ class UserDetail(Resource):
     @admin_required
     def get(self, user_id):
         """Get specific user"""
-        user = User.query.get(user_id)
+        try:
+            user_uuid = uuid.UUID(user_id)
+        except ValueError:
+            users_ns.abort(HTTP_STATUS.BAD_REQUEST, "Invalid user ID format")
+
+        user = User.query.get(user_uuid)
 
         if not user:
             users_ns.abort(HTTP_STATUS.NOT_FOUND, "User not found")
@@ -154,7 +163,12 @@ class UserDetail(Resource):
     @admin_required
     def put(self, user_id):
         """Update user"""
-        user = User.query.get(user_id)
+        try:
+            user_uuid = uuid.UUID(user_id)
+        except ValueError:
+            users_ns.abort(HTTP_STATUS.BAD_REQUEST, "Invalid user ID format")
+
+        user = User.query.get(user_uuid)
 
         if not user:
             users_ns.abort(HTTP_STATUS.NOT_FOUND, "User not found")
@@ -190,7 +204,12 @@ class UserDetail(Resource):
     @admin_required
     def delete(self, user_id):
         """Delete user"""
-        user = User.query.get(user_id)
+        try:
+            user_uuid = uuid.UUID(user_id)
+        except ValueError:
+            users_ns.abort(HTTP_STATUS.BAD_REQUEST, "Invalid user ID format")
+
+        user = User.query.get(user_uuid)
 
         if not user:
             users_ns.abort(HTTP_STATUS.NOT_FOUND, "User not found")
@@ -201,8 +220,8 @@ class UserDetail(Resource):
         return {"message": "User deleted"}
 
 
-@users_ns.route("/<int:user_id>/activate")
-@users_ns.param("user_id", "User ID")
+@users_ns.route("/<string:user_id>/activate")
+@users_ns.param("user_id", "User ID (UUID)")
 class UserActivate(Resource):
     @users_ns.doc(
         description="Activate user account (admin only)",
@@ -218,7 +237,12 @@ class UserActivate(Resource):
     @admin_required
     def post(self, user_id):
         """Activate user"""
-        user = User.query.get(user_id)
+        try:
+            user_uuid = uuid.UUID(user_id)
+        except ValueError:
+            users_ns.abort(HTTP_STATUS.BAD_REQUEST, "Invalid user ID format")
+
+        user = User.query.get(user_uuid)
 
         if not user:
             users_ns.abort(HTTP_STATUS.NOT_FOUND, "User not found")
@@ -229,8 +253,8 @@ class UserActivate(Resource):
         return {"message": "User activated"}
 
 
-@users_ns.route("/<int:user_id>/deactivate")
-@users_ns.param("user_id", "User ID")
+@users_ns.route("/<string:user_id>/deactivate")
+@users_ns.param("user_id", "User ID (UUID)")
 class UserDeactivate(Resource):
     @users_ns.doc(
         description="Deactivate user account (admin only)",
@@ -246,7 +270,12 @@ class UserDeactivate(Resource):
     @admin_required
     def post(self, user_id):
         """Deactivate user"""
-        user = User.query.get(user_id)
+        try:
+            user_uuid = uuid.UUID(user_id)
+        except ValueError:
+            users_ns.abort(HTTP_STATUS.BAD_REQUEST, "Invalid user ID format")
+
+        user = User.query.get(user_uuid)
 
         if not user:
             users_ns.abort(HTTP_STATUS.NOT_FOUND, "User not found")

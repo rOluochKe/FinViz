@@ -21,9 +21,9 @@ class TransactionSchema(SQLAlchemyAutoSchema):
         load_instance = True
         include_fk = True
 
-    id = fields.Integer(dump_only=True)
-    user_id = fields.Integer(load_only=True)
-    category_id = fields.Integer(required=True, validate=validate.Range(min=1))
+    id = fields.UUID(dump_only=True)
+    user_id = fields.UUID(load_only=True)
+    category_id = fields.UUID(required=True)
     amount = fields.Float(required=True, validate=validate.Range(min=0.01))
     description = fields.String(required=True, validate=validate.Length(min=1, max=200))
     date = fields.Date(required=True, format="%Y-%m-%d")
@@ -101,7 +101,7 @@ class TransactionSchema(SQLAlchemyAutoSchema):
 class TransactionCreateSchema(Schema):
     """Schema for transaction creation."""
 
-    category_id = fields.Integer(required=True, validate=validate.Range(min=1))
+    category_id = fields.UUID(required=True)
     amount = fields.Float(required=True, validate=validate.Range(min=0.01))
     description = fields.String(required=True, validate=validate.Length(min=1, max=200))
     date = fields.Date(required=True)
@@ -160,7 +160,7 @@ class TransactionCreateSchema(Schema):
 class TransactionUpdateSchema(Schema):
     """Schema for transaction updates."""
 
-    category_id = fields.Integer(validate=validate.Range(min=1))
+    category_id = fields.UUID(validate=validate.Range(min=1))
     amount = fields.Float(validate=validate.Range(min=0.01))
     description = fields.String(validate=validate.Length(min=1, max=200))
     date = fields.Date(format="%Y-%m-%d")
@@ -204,7 +204,7 @@ class TransactionFilterSchema(Schema):
 
     start_date = fields.Date(allow_none=True, format="%Y-%m-%d")
     end_date = fields.Date(allow_none=True, format="%Y-%m-%d")
-    category_id = fields.Integer(allow_none=True)
+    category_id = fields.UUID(allow_none=True)
     type = fields.String(
         allow_none=True, validate=validate.OneOf(TransactionType.choices())
     )
@@ -295,7 +295,7 @@ class TransactionSummarySchema(Schema):
 class RecurringTransactionSchema(Schema):
     """Schema for recurring transactions."""
 
-    id = fields.Integer()
+    id = fields.UUID()
     description = fields.String()
     amount = fields.Float()
     type = fields.String()

@@ -2,6 +2,7 @@
 Export routes with Flask-RESTX.
 """
 
+import uuid
 from datetime import datetime
 
 from flask import request, send_file
@@ -52,7 +53,10 @@ transaction_export_filter = exports_ns.model(
         "end_date": fields.String(
             description="End date (YYYY-MM-DD)", example="2024-12-31"
         ),
-        "category_id": fields.Integer(description="Category ID filter", example=5),
+        "category_id": fields.String(
+            description="Category ID filter (UUID)",
+            example="123e4567-e89b-12d3-a456-426614174000",
+        ),
     },
 )
 
@@ -181,6 +185,7 @@ class ExportTransactions(Resource):
     )
     @exports_ns.param("start_date", "Start date filter (YYYY-MM-DD)", type="string")
     @exports_ns.param("end_date", "End date filter (YYYY-MM-DD)", type="string")
+    @exports_ns.param("category_id", "Category ID filter (UUID)", type="string")
     @jwt_required()
     def get(self):
         """Export transactions to file"""
@@ -196,6 +201,7 @@ class ExportTransactions(Resource):
         # Get filters
         start = request.args.get("start_date")
         end = request.args.get("end_date")
+        category_id_param = request.args.get("category_id")
 
         # Build query
         query = Transaction.query.filter_by(user_id=user_id)
@@ -204,6 +210,17 @@ class ExportTransactions(Resource):
             query = query.filter(Transaction.date >= start)
         if end:
             query = query.filter(Transaction.date <= end)
+        
+        # Handle category_id - convert string to UUID
+        if category_id_param:
+            try:
+                category_uuid = uuid.UUID(category_id_param)
+                query = query.filter_by(category_id=category_uuid)
+            except ValueError:
+                exports_ns.abort(
+                    HTTP_STATUS.BAD_REQUEST, 
+                    f"Invalid category_id format: {category_id_param}. Must be a valid UUID."
+                )
 
         transactions = query.order_by(Transaction.date.desc()).all()
 
@@ -386,8 +403,17 @@ class ExportCustomReport(Resource):
                 query = query.filter(Transaction.date >= filters["start_date"])
             if filters.get("end_date"):
                 query = query.filter(Transaction.date <= filters["end_date"])
+            
+            # Handle category_id - convert string to UUID
             if filters.get("category_id"):
-                query = query.filter_by(category_id=filters["category_id"])
+                try:
+                    category_uuid = uuid.UUID(filters["category_id"])
+                    query = query.filter_by(category_id=category_uuid)
+                except ValueError:
+                    exports_ns.abort(
+                        HTTP_STATUS.BAD_REQUEST,
+                        f"Invalid category_id format: {filters['category_id']}. Must be a valid UUID."
+                    )
 
             items = query.all()
             export_data = [

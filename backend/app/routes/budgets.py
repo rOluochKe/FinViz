@@ -2,7 +2,10 @@
 Budget routes with Flask-RESTX.
 """
 
+import uuid
+import logging
 from datetime import datetime
+from functools import wraps
 
 from flask import request
 from flask_jwt_extended import get_jwt_identity, jwt_required
@@ -18,6 +21,31 @@ from app.utils.constants import HTTP_STATUS, BudgetPeriod
 # Create namespace
 budgets_ns = Namespace("budgets", description="Budget operations")
 
+logger = logging.getLogger(__name__)
+
+# ============================================================================
+# Helper Decorator for Safe Caching
+# ============================================================================
+
+def safe_cache_cached(timeout=60, query_string=False):
+    """
+    Decorator that safely handles cache unavailability.
+    If Redis is not available, it skips caching and executes the function directly.
+    """
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            try:
+                if query_string:
+                    return cache.cached(timeout=timeout, query_string=True)(f)(*args, **kwargs)
+                else:
+                    return cache.cached(timeout=timeout)(f)(*args, **kwargs)
+            except Exception as e:
+                logger.debug(f"Cache unavailable, skipping cache: {str(e)}")
+                return f(*args, **kwargs)
+        return decorated_function
+    return decorator
+
 # ============================================================================
 # Model Definitions
 # =============================================================================
@@ -25,9 +53,17 @@ budgets_ns = Namespace("budgets", description="Budget operations")
 budget_model = budgets_ns.model(
     "Budget",
     {
-        "id": fields.Integer(description="Budget ID", example=1),
-        "user_id": fields.Integer(description="User ID", example=1),
-        "category_id": fields.Integer(description="Category ID", example=5),
+        "id": fields.String(
+            description="Budget ID (UUID)",
+            example="123e4567-e89b-12d3-a456-426614174000",
+        ),
+        "user_id": fields.String(
+            description="User ID (UUID)", example="123e4567-e89b-12d3-a456-426614174000"
+        ),
+        "category_id": fields.String(
+            description="Category ID (UUID)",
+            example="123e4567-e89b-12d3-a456-426614174000",
+        ),
         "category_name": fields.String(
             description="Category name", example="Groceries"
         ),
@@ -62,8 +98,10 @@ budget_model = budgets_ns.model(
 budget_create_model = budgets_ns.model(
     "BudgetCreate",
     {
-        "category_id": fields.Integer(
-            required=True, description="Category ID", example=5
+        "category_id": fields.String(
+            required=True,
+            description="Category ID (UUID)",
+            example="123e4567-e89b-12d3-a456-426614174000",
         ),
         "amount": fields.Float(
             required=True, description="Budget amount", example=500.00, min=0.01
@@ -109,8 +147,14 @@ budget_update_model = budgets_ns.model(
 budget_status_model = budgets_ns.model(
     "BudgetStatus",
     {
-        "budget_id": fields.Integer(description="Budget ID"),
-        "category_id": fields.Integer(description="Category ID"),
+        "budget_id": fields.String(
+            description="Budget ID (UUID)",
+            example="123e4567-e89b-12d3-a456-426614174000",
+        ),
+        "category_id": fields.String(
+            description="Category ID (UUID)",
+            example="123e4567-e89b-12d3-a456-426614174000",
+        ),
         "category_name": fields.String(description="Category name"),
         "category_color": fields.String(description="Category color"),
         "budget_amount": fields.Float(description="Budget amount"),
@@ -139,7 +183,10 @@ budget_status_overview_model = budgets_ns.model(
 budget_suggestion_model = budgets_ns.model(
     "BudgetSuggestion",
     {
-        "category_id": fields.Integer(description="Category ID"),
+        "category_id": fields.String(
+            description="Category ID (UUID)",
+            example="123e4567-e89b-12d3-a456-426614174000",
+        ),
         "category_name": fields.String(description="Category name"),
         "category_color": fields.String(description="Category color"),
         "current_avg_monthly": fields.Float(description="Current monthly average"),
@@ -184,7 +231,7 @@ class BudgetList(Resource):
     @budgets_ns.param("month", "Month (for monthly budgets)", type="integer")
     @budgets_ns.marshal_list_with(budget_model)
     @jwt_required()
-    @cache.cached(timeout=60, query_string=True)
+    @safe_cache_cached(timeout=60, query_string=True)  # Safe cache with query string
     def get(self):
         """Get budgets"""
         user_id = get_jwt_identity()
@@ -213,6 +260,7 @@ class BudgetList(Resource):
             400: "Validation error",
             401: "Authentication required",
             409: "Budget already exists",
+            415: "Invalid Content-Type",
         },
     )
     @budgets_ns.expect(budget_create_model)
@@ -220,18 +268,37 @@ class BudgetList(Resource):
     @jwt_required()
     def post(self):
         """Create a new budget"""
+        # Check Content-Type header
+        if not request.is_json:
+            budgets_ns.abort(
+                HTTP_STATUS.UNSUPPORTED_MEDIA_TYPE,
+                "Content-Type must be application/json"
+            )
+        
         user_id = get_jwt_identity()
         data = request.json
 
+        # Validate required fields
+        required_fields = ["category_id", "amount", "period", "year"]
+        for field in required_fields:
+            if field not in data:
+                budgets_ns.abort(HTTP_STATUS.BAD_REQUEST, f"Missing required field: {field}")
+
+        # Validate category_id format
+        try:
+            category_uuid = uuid.UUID(data["category_id"])
+        except ValueError:
+            budgets_ns.abort(HTTP_STATUS.BAD_REQUEST, "Invalid category_id format. Must be a valid UUID.")
+
         # Check category
-        category = Category.query.get(data["category_id"])
+        category = Category.query.get(category_uuid)
         if not category:
             budgets_ns.abort(HTTP_STATUS.BAD_REQUEST, "Category not found")
 
         # Check existing
         existing = Budget.query.filter_by(
             user_id=user_id,
-            category_id=data["category_id"],
+            category_id=category_uuid,
             period=data["period"],
             year=data["year"],
             month=data.get("month"),
@@ -240,15 +307,28 @@ class BudgetList(Resource):
         if existing:
             budgets_ns.abort(HTTP_STATUS.CONFLICT, "Budget already exists")
 
-        budget = Budget(user_id=user_id, **data)
+        # Create budget
+        budget = Budget(
+            user_id=user_id,
+            category_id=category_uuid,
+            amount=data["amount"],
+            period=data["period"],
+            year=data["year"],
+            month=data.get("month"),
+            alert_threshold=data.get("alert_threshold", 80.0),
+            is_active=data.get("is_active", True),
+            rollover=data.get("rollover", False),
+            notes=data.get("notes")
+        )
+        
         db.session.add(budget)
         db.session.commit()
 
         return BudgetSchema().dump(budget), HTTP_STATUS.CREATED
 
 
-@budgets_ns.route("/<int:budget_id>")
-@budgets_ns.param("budget_id", "Budget ID")
+@budgets_ns.route("/<string:budget_id>")
+@budgets_ns.param("budget_id", "Budget ID (UUID)")
 class BudgetDetail(Resource):
     @budgets_ns.doc(
         description="Get budget by ID",
@@ -265,7 +345,12 @@ class BudgetDetail(Resource):
         """Get specific budget"""
         user_id = get_jwt_identity()
 
-        budget = Budget.query.filter_by(id=budget_id, user_id=user_id).first()
+        try:
+            budget_uuid = uuid.UUID(budget_id)
+        except ValueError:
+            budgets_ns.abort(HTTP_STATUS.BAD_REQUEST, "Invalid budget ID format")
+
+        budget = Budget.query.filter_by(id=budget_uuid, user_id=user_id).first()
 
         if not budget:
             budgets_ns.abort(HTTP_STATUS.NOT_FOUND, "Budget not found")
@@ -287,10 +372,22 @@ class BudgetDetail(Resource):
     @jwt_required()
     def put(self, budget_id):
         """Update budget"""
+        # Check Content-Type header
+        if not request.is_json:
+            budgets_ns.abort(
+                HTTP_STATUS.UNSUPPORTED_MEDIA_TYPE,
+                "Content-Type must be application/json"
+            )
+        
         user_id = get_jwt_identity()
         data = request.json
 
-        budget = Budget.query.filter_by(id=budget_id, user_id=user_id).first()
+        try:
+            budget_uuid = uuid.UUID(budget_id)
+        except ValueError:
+            budgets_ns.abort(HTTP_STATUS.BAD_REQUEST, "Invalid budget ID format")
+
+        budget = Budget.query.filter_by(id=budget_uuid, user_id=user_id).first()
 
         if not budget:
             budgets_ns.abort(HTTP_STATUS.NOT_FOUND, "Budget not found")
@@ -317,7 +414,12 @@ class BudgetDetail(Resource):
         """Delete budget"""
         user_id = get_jwt_identity()
 
-        budget = Budget.query.filter_by(id=budget_id, user_id=user_id).first()
+        try:
+            budget_uuid = uuid.UUID(budget_id)
+        except ValueError:
+            budgets_ns.abort(HTTP_STATUS.BAD_REQUEST, "Invalid budget ID format")
+
+        budget = Budget.query.filter_by(id=budget_uuid, user_id=user_id).first()
 
         if not budget:
             budgets_ns.abort(HTTP_STATUS.NOT_FOUND, "Budget not found")
@@ -365,8 +467,8 @@ class BudgetSuggestions(Resource):
         return suggestions
 
 
-@budgets_ns.route("/<int:budget_id>/progress")
-@budgets_ns.param("budget_id", "Budget ID")
+@budgets_ns.route("/<string:budget_id>/progress")
+@budgets_ns.param("budget_id", "Budget ID (UUID)")
 class BudgetProgress(Resource):
     @budgets_ns.doc(
         description="Get detailed budget progress with projections",
@@ -379,7 +481,12 @@ class BudgetProgress(Resource):
         """Get budget progress"""
         user_id = get_jwt_identity()
 
-        budget = Budget.query.filter_by(id=budget_id, user_id=user_id).first()
+        try:
+            budget_uuid = uuid.UUID(budget_id)
+        except ValueError:
+            budgets_ns.abort(HTTP_STATUS.BAD_REQUEST, "Invalid budget ID format")
+
+        budget = Budget.query.filter_by(id=budget_uuid, user_id=user_id).first()
 
         if not budget:
             budgets_ns.abort(HTTP_STATUS.NOT_FOUND, "Budget not found")

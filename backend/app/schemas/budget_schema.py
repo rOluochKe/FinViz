@@ -19,9 +19,9 @@ class BudgetSchema(SQLAlchemyAutoSchema):
         load_instance = True
         include_fk = True
 
-    id = fields.Integer(dump_only=True)
-    user_id = fields.Integer(load_only=True)
-    category_id = fields.Integer(required=True, validate=validate.Range(min=1))
+    id = fields.UUID(dump_only=True)
+    user_id = fields.UUID(load_only=True)
+    category_id = fields.UUID(required=True)
     amount = fields.Float(required=True, validate=validate.Range(min=0.01))
     period = fields.String(
         required=True,
@@ -66,7 +66,7 @@ class BudgetSchema(SQLAlchemyAutoSchema):
 class BudgetCreateSchema(Schema):
     """Schema for budget creation."""
 
-    category_id = fields.Integer(required=True, validate=validate.Range(min=1))
+    category_id = fields.UUID(required=True)
     amount = fields.Float(required=True, validate=validate.Range(min=0.01))
     period = fields.String(
         required=True,
@@ -134,7 +134,7 @@ class BudgetFilterSchema(Schema):
 
     year = fields.Integer(required=False, validate=validate.Range(min=2000, max=2100))
     month = fields.Integer(allow_none=True, validate=validate.Range(min=1, max=12))
-    category_id = fields.Integer(allow_none=True)
+    category_id = fields.UUID(allow_none=True)
     is_active = fields.Boolean(load_default=True)
     period = fields.String(
         allow_none=True, validate=validate.OneOf(BudgetPeriod.choices())
@@ -144,8 +144,8 @@ class BudgetFilterSchema(Schema):
 class BudgetStatusSchema(Schema):
     """Schema for budget status."""
 
-    budget_id = fields.Integer()
-    category_id = fields.Integer()
+    budget_id = fields.UUID()
+    category_id = fields.UUID()
     category_name = fields.String()
     category_color = fields.String()
     budget_amount = fields.Float()
@@ -168,7 +168,7 @@ class BudgetStatusOverviewSchema(Schema):
 class BudgetSuggestionSchema(Schema):
     """Schema for budget suggestions."""
 
-    category_id = fields.Integer()
+    category_id = fields.UUID()
     category_name = fields.String()
     category_color = fields.String()
     current_avg_monthly = fields.Float()

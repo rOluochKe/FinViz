@@ -2,13 +2,14 @@
 User model for authentication and user management.
 """
 
+import uuid
 from datetime import datetime
 
 from flask import current_app
 from flask_jwt_extended import create_access_token, create_refresh_token
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from sqlalchemy import CheckConstraint, Index
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from app.extensions import db
@@ -17,30 +18,12 @@ from app.extensions import db
 class User(db.Model):
     """
     User model representing application users.
-
-    Attributes:
-        id: Primary key
-        username: Unique username
-        email: Unique email address
-        password_hash: Hashed password
-        first_name: User's first name
-        last_name: User's last name
-        role: User role (admin, user)
-        status: Account status (active, inactive, suspended)
-        preferences: JSONB field for user preferences
-        created_at: Timestamp of creation
-        updated_at: Timestamp of last update
-        last_login: Timestamp of last login
-        email_verified: Whether email is verified
-        verification_token: Email verification token
-        reset_token: Password reset token
-        reset_token_expires: Reset token expiration
     """
 
     __tablename__ = "users"
 
-    # Primary key
-    id = db.Column(db.Integer, primary_key=True)
+    # Primary key - using UUID
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
 
     # Authentication fields
     username = db.Column(db.String(50), unique=True, nullable=False, index=True)
@@ -87,15 +70,24 @@ class User(db.Model):
     reset_token = db.Column(db.String(100), unique=True)
     reset_token_expires = db.Column(db.DateTime)
 
-    # Relationships
+    # Relationships - using string references to avoid circular imports
     transactions = db.relationship(
-        "Transaction", backref="user", lazy="dynamic", cascade="all, delete-orphan"
+        "Transaction",
+        back_populates="user",
+        lazy="dynamic",
+        cascade="all, delete-orphan",
     )
     budgets = db.relationship(
-        "Budget", backref="user", lazy="dynamic", cascade="all, delete-orphan"
+        "Budget", back_populates="user", lazy="dynamic", cascade="all, delete-orphan"
     )
     monthly_stats = db.relationship(
-        "MonthlyStat", backref="user", lazy="dynamic", cascade="all, delete-orphan"
+        "MonthlyStat",
+        back_populates="user",
+        lazy="dynamic",
+        cascade="all, delete-orphan",
+    )
+    categories = db.relationship(
+        "Category", back_populates="user", lazy="dynamic", cascade="all, delete-orphan"
     )
 
     # Indexes for performance
@@ -127,33 +119,15 @@ class User(db.Model):
         return self.role == "admin"
 
     def set_password(self, password):
-        """
-        Set password hash.
-
-        Args:
-            password: Plain text password
-        """
+        """Set password hash."""
         self.password_hash = generate_password_hash(password, method="pbkdf2:sha256")
 
     def check_password(self, password):
-        """
-        Verify password.
-
-        Args:
-            password: Plain text password to verify
-
-        Returns:
-            bool: True if password matches
-        """
+        """Verify password."""
         return check_password_hash(self.password_hash, password)
 
     def generate_auth_tokens(self):
-        """
-        Generate JWT access and refresh tokens.
-
-        Returns:
-            dict: Access and refresh tokens
-        """
+        """Generate JWT access and refresh tokens."""
         access_token = create_access_token(
             identity=str(self.id),
             additional_claims={
@@ -179,27 +153,12 @@ class User(db.Model):
         }
 
     def generate_verification_token(self):
-        """
-        Generate email verification token.
-
-        Returns:
-            str: Verification token
-        """
+        """Generate email verification token."""
         serializer = URLSafeTimedSerializer(current_app.config["SECRET_KEY"])
         return serializer.dumps(self.email, salt="email-verification")
 
     def verify_email(self, token, expiration=86400):
-        """
-        Verify email with token.
-
-        Args:
-            token: Verification token
-            expiration: Token expiration in seconds
-
-        Returns:
-            bool: True if verified successfully
-        """
-
+        """Verify email with token."""
         serializer = URLSafeTimedSerializer(current_app.config["SECRET_KEY"])
         try:
             email = serializer.loads(
@@ -217,27 +176,12 @@ class User(db.Model):
             return False
 
     def generate_reset_token(self):
-        """
-        Generate password reset token.
-
-        Returns:
-            str: Reset token
-        """
+        """Generate password reset token."""
         serializer = URLSafeTimedSerializer(current_app.config["SECRET_KEY"])
         return serializer.dumps(self.email, salt="password-reset")
 
     def verify_reset_token(self, token, new_password, expiration=3600):
-        """
-        Verify reset token and set new password.
-
-        Args:
-            token: Reset token
-            new_password: New password
-            expiration: Token expiration in seconds
-
-        Returns:
-            bool: True if reset successful
-        """
+        """Verify reset token and set new password."""
         serializer = URLSafeTimedSerializer(current_app.config["SECRET_KEY"])
         try:
             email = serializer.loads(token, salt="password-reset", max_age=expiration)
@@ -258,17 +202,9 @@ class User(db.Model):
         db.session.commit()
 
     def to_dict(self, include_sensitive=False):
-        """
-        Convert user to dictionary.
-
-        Args:
-            include_sensitive: Include sensitive fields
-
-        Returns:
-            dict: User data
-        """
+        """Convert user to dictionary."""
         data = {
-            "id": self.id,
+            "id": str(self.id),
             "username": self.username,
             "email": self.email,
             "first_name": self.first_name,

@@ -2,10 +2,11 @@
 Analytics service for complex data processing and business logic.
 """
 
+import uuid
 import warnings
 from collections import defaultdict
 from datetime import datetime, timedelta
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import numpy as np
 import pandas as pd
@@ -21,12 +22,12 @@ class AnalyticsService:
     """Service for advanced analytics operations."""
 
     @staticmethod
-    def calculate_spending_patterns(user_id: int, months: int = 12) -> Dict:
+    def calculate_spending_patterns(user_id: uuid.UUID, months: int = 12) -> Dict:
         """
         Analyze spending patterns and detect trends.
 
         Args:
-            user_id: User ID
+            user_id: User ID (UUID)
             months: Number of months to analyze
 
         Returns:
@@ -98,12 +99,14 @@ class AnalyticsService:
         }
 
     @staticmethod
-    def detect_anomalies(user_id: int, days: int = 30, threshold: float = 2.0) -> Dict:
+    def detect_anomalies(
+        user_id: uuid.UUID, days: int = 30, threshold: float = 2.0
+    ) -> Dict:
         """
         Detect anomalous transactions using z-score.
 
         Args:
-            user_id: User ID
+            user_id: User ID (UUID)
             days: Days to analyze
             threshold: Z-score threshold
 
@@ -132,7 +135,7 @@ class AnalyticsService:
             if abs(z) > threshold:
                 anomalies.append(
                     {
-                        "id": tx.id,
+                        "id": str(tx.id),
                         "date": tx.date.isoformat(),
                         "amount": float(tx.amount),
                         "desc": tx.description,
@@ -149,12 +152,12 @@ class AnalyticsService:
         }
 
     @staticmethod
-    def generate_forecast(user_id: int, months: int = 6) -> Dict:
+    def generate_forecast(user_id: uuid.UUID, months: int = 6) -> Dict:
         """
         Generate simple forecast using linear regression.
 
         Args:
-            user_id: User ID
+            user_id: User ID (UUID)
             months: Months to forecast
 
         Returns:
@@ -226,12 +229,12 @@ class AnalyticsService:
         }
 
     @staticmethod
-    def get_category_insights(user_id: int) -> List[Dict]:
+    def get_category_insights(user_id: uuid.UUID) -> List[Dict]:
         """
         Get insights for each category.
 
         Args:
-            user_id: User ID
+            user_id: User ID (UUID)
 
         Returns:
             List of category insights
@@ -267,7 +270,7 @@ class AnalyticsService:
 
             insights.append(
                 {
-                    "category_id": cat_id,
+                    "category_id": str(cat_id),
                     "category": category.name,
                     "color": category.color,
                     "total": total,

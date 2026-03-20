@@ -2,6 +2,7 @@
 Report service for generating financial reports.
 """
 
+import uuid
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 from typing import Dict
@@ -17,12 +18,12 @@ class ReportService:
     """Service for generating financial reports."""
 
     @staticmethod
-    def monthly_report(user_id: int, year: int, month: int) -> Dict:
+    def monthly_report(user_id: uuid.UUID, year: int, month: int) -> Dict:
         """
         Generate monthly financial report.
 
         Args:
-            user_id: User ID
+            user_id: User ID (UUID)
             year: Year
             month: Month
 
@@ -100,12 +101,12 @@ class ReportService:
         }
 
     @staticmethod
-    def yearly_report(user_id: int, year: int) -> Dict:
+    def yearly_report(user_id: uuid.UUID, year: int) -> Dict:
         """
         Generate yearly financial report.
 
         Args:
-            user_id: User ID
+            user_id: User ID (UUID)
             year: Year
 
         Returns:
@@ -184,13 +185,15 @@ class ReportService:
         }
 
     @staticmethod
-    def category_report(user_id: int, category_id: int, months: int = 12) -> Dict:
+    def category_report(
+        user_id: uuid.UUID, category_id: uuid.UUID, months: int = 12
+    ) -> Dict:
         """
         Generate report for specific category.
 
         Args:
-            user_id: User ID
-            category_id: Category ID
+            user_id: User ID (UUID)
+            category_id: Category ID (UUID)
             months: Months to analyze
 
         Returns:
@@ -226,7 +229,7 @@ class ReportService:
 
         return {
             "category": {
-                "id": category_id,
+                "id": str(category_id),
                 "name": category.name if category else "Unknown",
                 "color": category.color if category else "#808080",
                 "type": category.type if category else "expense",

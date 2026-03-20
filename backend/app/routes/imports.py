@@ -4,7 +4,9 @@ Import routes with Flask-RESTX.
 
 import csv
 import io
+import logging
 from pathlib import Path
+from functools import wraps
 
 from flask import request
 from flask_jwt_extended import get_jwt_identity, jwt_required
@@ -18,6 +20,29 @@ from app.utils.constants import HTTP_STATUS
 
 # Create namespace
 imports_ns = Namespace("imports", description="Data import operations")
+
+logger = logging.getLogger(__name__)
+
+# ============================================================================
+# Helper Decorators
+# ============================================================================
+
+def safe_cache_cached(timeout=60):
+    """
+    Decorator that safely handles cache unavailability.
+    If Redis is not available, it skips caching and executes the function directly.
+    """
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            try:
+                from app.extensions import cache
+                return cache.cached(timeout=timeout)(f)(*args, **kwargs)
+            except Exception as e:
+                logger.debug(f"Cache unavailable, skipping cache: {str(e)}")
+                return f(*args, **kwargs)
+        return decorated_function
+    return decorator
 
 # ============================================================================
 # Model Definitions
@@ -172,23 +197,28 @@ class UploadFile(Resource):
     @jwt_required()
     def post(self):
         """Upload file for import"""
-        user_id = get_jwt_identity()
+        try:
+            user_id = get_jwt_identity()
 
-        if "file" not in request.files:
-            imports_ns.abort(HTTP_STATUS.BAD_REQUEST, "No file uploaded")
+            if "file" not in request.files:
+                imports_ns.abort(HTTP_STATUS.BAD_REQUEST, "No file uploaded")
 
-        file = request.files["file"]
-        if file.filename == "":
-            imports_ns.abort(HTTP_STATUS.BAD_REQUEST, "Empty filename")
+            file = request.files["file"]
+            if file.filename == "":
+                imports_ns.abort(HTTP_STATUS.BAD_REQUEST, "Empty filename")
 
-        # Check file type
-        if not FileService.allowed_file(file.filename):
-            imports_ns.abort(HTTP_STATUS.BAD_REQUEST, "File type not allowed")
+            # Check file type
+            if not FileService.allowed_file(file.filename):
+                imports_ns.abort(HTTP_STATUS.BAD_REQUEST, "File type not allowed")
 
-        # Save temp file
-        file_info = FileService().save_temp(file, file.filename)
+            # Save temp file
+            file_info = FileService().save_temp(file, file.filename)
 
-        return {"message": "File uploaded", "file": file_info}
+            return {"message": "File uploaded", "file": file_info}
+            
+        except Exception as e:
+            logger.error(f"Upload error: {str(e)}")
+            imports_ns.abort(HTTP_STATUS.INTERNAL_SERVER_ERROR, f"Upload failed: {str(e)}")
 
 
 @imports_ns.route("/preview")
@@ -208,55 +238,60 @@ class PreviewImport(Resource):
     @jwt_required()
     def post(self):
         """Preview import"""
-        user_id = get_jwt_identity()
-        data = request.json or {}
-
-        filename = data.get("filename")
-        if not filename:
-            imports_ns.abort(HTTP_STATUS.BAD_REQUEST, "Filename required")
-
-        mapping = data.get("mapping", {})
-
-        # Get file
-        file_service = FileService()
-        file_path = file_service.temp / filename
-
-        if not file_path.exists():
-            imports_ns.abort(HTTP_STATUS.NOT_FOUND, "File not found")
-
-        # Read file
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
-                content = f.read()
-        except UnicodeDecodeError:
+            user_id = get_jwt_identity()
+            data = request.json or {}
+
+            filename = data.get("filename")
+            if not filename:
+                imports_ns.abort(HTTP_STATUS.BAD_REQUEST, "Filename required")
+
+            mapping = data.get("mapping", {})
+
+            # Get file
+            file_service = FileService()
+            file_path = file_service.temp / filename
+
+            if not file_path.exists():
+                imports_ns.abort(HTTP_STATUS.NOT_FOUND, "File not found")
+
+            # Read file
             try:
-                with open(file_path, "r", encoding="latin-1") as f:
+                with open(file_path, "r", encoding="utf-8") as f:
                     content = f.read()
-            except Exception as e:
+            except UnicodeDecodeError:
+                try:
+                    with open(file_path, "r", encoding="latin-1") as f:
+                        content = f.read()
+                except Exception as e:
+                    imports_ns.abort(
+                        HTTP_STATUS.BAD_REQUEST, f"Could not read file: {str(e)}"
+                    )
+
+            # Parse based on extension
+            records = None
+            if filename.endswith(".csv"):
+                records = ImportService.parse_csv(content, mapping)
+            elif filename.endswith(".json"):
+                records = ImportService.parse_json(content)
+            else:
                 imports_ns.abort(
-                    HTTP_STATUS.BAD_REQUEST, f"Could not read file: {str(e)}"
+                    HTTP_STATUS.BAD_REQUEST, "Unsupported file type. Use .csv or .json"
                 )
 
-        # Parse based on extension
-        records = None
-        if filename.endswith(".csv"):
-            records = ImportService.parse_csv(content, mapping)
-        elif filename.endswith(".json"):
-            records = ImportService.parse_json(content)
-        else:
-            imports_ns.abort(
-                HTTP_STATUS.BAD_REQUEST, "Unsupported file type. Use .csv or .json"
-            )
+            if records is None:
+                imports_ns.abort(
+                    HTTP_STATUS.BAD_REQUEST, "Failed to parse records from file"
+                )
 
-        if records is None:
-            imports_ns.abort(
-                HTTP_STATUS.BAD_REQUEST, "Failed to parse records from file"
-            )
+            # Validate
+            results = ImportService.import_transactions(records, user_id, dry_run=True)
 
-        # Validate
-        results = ImportService.import_transactions(records, user_id, dry_run=True)
-
-        return results
+            return results
+            
+        except Exception as e:
+            logger.error(f"Preview error: {str(e)}")
+            imports_ns.abort(HTTP_STATUS.INTERNAL_SERVER_ERROR, f"Preview failed: {str(e)}")
 
 
 @imports_ns.route("/execute")
@@ -276,64 +311,69 @@ class ExecuteImport(Resource):
     @jwt_required()
     def post(self):
         """Execute import"""
-        user_id = get_jwt_identity()
-        data = request.json or {}
-
-        filename = data.get("filename")
-        if not filename:
-            imports_ns.abort(HTTP_STATUS.BAD_REQUEST, "Filename required")
-
-        mapping = data.get("mapping", {})
-
-        # Get file
-        file_service = FileService()
-        file_path = file_service.temp / filename
-
-        if not file_path.exists():
-            imports_ns.abort(HTTP_STATUS.NOT_FOUND, "File not found")
-
-        # Read file
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
-                content = f.read()
-        except UnicodeDecodeError:
+            user_id = get_jwt_identity()
+            data = request.json or {}
+
+            filename = data.get("filename")
+            if not filename:
+                imports_ns.abort(HTTP_STATUS.BAD_REQUEST, "Filename required")
+
+            mapping = data.get("mapping", {})
+
+            # Get file
+            file_service = FileService()
+            file_path = file_service.temp / filename
+
+            if not file_path.exists():
+                imports_ns.abort(HTTP_STATUS.NOT_FOUND, "File not found")
+
+            # Read file
             try:
-                with open(file_path, "r", encoding="latin-1") as f:
+                with open(file_path, "r", encoding="utf-8") as f:
                     content = f.read()
-            except Exception as e:
+            except UnicodeDecodeError:
+                try:
+                    with open(file_path, "r", encoding="latin-1") as f:
+                        content = f.read()
+                except Exception as e:
+                    imports_ns.abort(
+                        HTTP_STATUS.BAD_REQUEST, f"Could not read file: {str(e)}"
+                    )
+
+            # Parse
+            records = None
+            if filename.endswith(".csv"):
+                records = ImportService.parse_csv(content, mapping)
+            elif filename.endswith(".json"):
+                records = ImportService.parse_json(content)
+            else:
                 imports_ns.abort(
-                    HTTP_STATUS.BAD_REQUEST, f"Could not read file: {str(e)}"
+                    HTTP_STATUS.BAD_REQUEST, "Unsupported file type. Use .csv or .json"
                 )
 
-        # Parse
-        records = None
-        if filename.endswith(".csv"):
-            records = ImportService.parse_csv(content, mapping)
-        elif filename.endswith(".json"):
-            records = ImportService.parse_json(content)
-        else:
-            imports_ns.abort(
-                HTTP_STATUS.BAD_REQUEST, "Unsupported file type. Use .csv or .json"
-            )
+            if records is None:
+                imports_ns.abort(
+                    HTTP_STATUS.BAD_REQUEST, "Failed to parse records from file"
+                )
 
-        if records is None:
-            imports_ns.abort(
-                HTTP_STATUS.BAD_REQUEST, "Failed to parse records from file"
-            )
+            # Import
+            results = ImportService.import_transactions(records, user_id, dry_run=False)
 
-        # Import
-        results = ImportService.import_transactions(records, user_id, dry_run=False)
+            # Clean up temp file
+            try:
+                file_path.unlink()
+            except:
+                pass  # Ignore cleanup errors
 
-        # Clean up temp file
-        try:
-            file_path.unlink()
-        except:
-            pass  # Ignore cleanup errors
-
-        return {
-            "message": f"Imported {results['success']} transactions",
-            "results": results,
-        }
+            return {
+                "message": f"Imported {results['success']} transactions",
+                "results": results,
+            }
+            
+        except Exception as e:
+            logger.error(f"Execute import error: {str(e)}")
+            imports_ns.abort(HTTP_STATUS.INTERNAL_SERVER_ERROR, f"Import failed: {str(e)}")
 
 
 @imports_ns.route("/template")
@@ -348,28 +388,33 @@ class GetTemplate(Resource):
     @imports_ns.marshal_with(template_response)
     def get(self):
         """Get import template"""
-        format = request.args.get("format", "csv")
+        try:
+            format = request.args.get("format", "csv")
 
-        template = [
-            {
-                "date": "2024-01-15",
-                "description": "Grocery store",
-                "amount": "45.67",
-                "category": "Groceries",
-                "type": "expense",
-                "notes": "Weekly shopping",
-            }
-        ]
+            template = [
+                {
+                    "date": "2024-01-15",
+                    "description": "Grocery store",
+                    "amount": "45.67",
+                    "category": "Groceries",
+                    "type": "expense",
+                    "notes": "Weekly shopping",
+                }
+            ]
 
-        if format == "csv":
-            output = io.StringIO()
-            writer = csv.DictWriter(output, fieldnames=template[0].keys())
-            writer.writeheader()
-            writer.writerows(template)
-            output.seek(0)
-            return {"template": output.getvalue(), "format": "csv"}
-        else:
-            return {"template": template, "format": "json"}
+            if format == "csv":
+                output = io.StringIO()
+                writer = csv.DictWriter(output, fieldnames=template[0].keys())
+                writer.writeheader()
+                writer.writerows(template)
+                output.seek(0)
+                return {"template": output.getvalue(), "format": "csv"}
+            else:
+                return {"template": template, "format": "json"}
+                
+        except Exception as e:
+            logger.error(f"Template generation error: {str(e)}")
+            imports_ns.abort(HTTP_STATUS.INTERNAL_SERVER_ERROR, f"Template generation failed: {str(e)}")
 
 
 @imports_ns.route("/supported-formats")
@@ -377,6 +422,7 @@ class SupportedFormats(Resource):
     @imports_ns.doc(
         description="Get supported import formats", responses={200: "Formats retrieved"}
     )
+    @safe_cache_cached(timeout=3600)  # Cache for 1 hour, handles Redis failure
     def get(self):
         """Get supported formats"""
         return {
@@ -413,42 +459,47 @@ class ValidateFile(Resource):
     @jwt_required()
     def post(self):
         """Validate import file"""
-        data = request.json or {}
-        filename = data.get("filename")
+        try:
+            data = request.json or {}
+            filename = data.get("filename")
 
-        if not filename:
-            imports_ns.abort(HTTP_STATUS.BAD_REQUEST, "Filename required")
+            if not filename:
+                imports_ns.abort(HTTP_STATUS.BAD_REQUEST, "Filename required")
 
-        file_service = FileService()
-        file_path = file_service.temp / filename
+            file_service = FileService()
+            file_path = file_service.temp / filename
 
-        if not file_path.exists():
-            imports_ns.abort(HTTP_STATUS.NOT_FOUND, "File not found")
+            if not file_path.exists():
+                imports_ns.abort(HTTP_STATUS.NOT_FOUND, "File not found")
 
-        # Check file size
-        file_size = file_path.stat().st_size
-        max_size = 16 * 1024 * 1024  # 16MB
-        if file_size > max_size:
+            # Check file size
+            file_size = file_path.stat().st_size
+            max_size = 16 * 1024 * 1024  # 16MB
+            if file_size > max_size:
+                return {
+                    "valid": False,
+                    "error": f"File too large. Maximum size is {max_size // (1024*1024)}MB",
+                    "size_mb": round(file_size / (1024 * 1024), 2),
+                }
+
+            # Check extension
+            if not filename.endswith((".csv", ".json")):
+                return {
+                    "valid": False,
+                    "error": "Unsupported file type. Use .csv or .json",
+                    "extension": filename.split(".")[-1] if "." in filename else "none",
+                }
+
             return {
-                "valid": False,
-                "error": f"File too large. Maximum size is {max_size // (1024*1024)}MB",
+                "valid": True,
                 "size_mb": round(file_size / (1024 * 1024), 2),
+                "extension": filename.split(".")[-1] if "." in filename else "",
+                "message": "File format is valid",
             }
-
-        # Check extension
-        if not filename.endswith((".csv", ".json")):
-            return {
-                "valid": False,
-                "error": "Unsupported file type. Use .csv or .json",
-                "extension": filename.split(".")[-1] if "." in filename else "none",
-            }
-
-        return {
-            "valid": True,
-            "size_mb": round(file_size / (1024 * 1024), 2),
-            "extension": filename.split(".")[-1] if "." in filename else "",
-            "message": "File format is valid",
-        }
+            
+        except Exception as e:
+            logger.error(f"Validation error: {str(e)}")
+            imports_ns.abort(HTTP_STATUS.INTERNAL_SERVER_ERROR, f"Validation failed: {str(e)}")
 
 
 @imports_ns.route("/clear-temp")
@@ -461,7 +512,12 @@ class ClearTemp(Resource):
     @jwt_required()
     def delete(self):
         """Clear all temporary files"""
-        file_service = FileService()
-        deleted = file_service.cleanup_temp(hours=0)  # Clear all temp files
+        try:
+            file_service = FileService()
+            deleted = file_service.cleanup_temp(hours=0)  # Clear all temp files
 
-        return {"message": f"Cleared {deleted} temporary files", "count": deleted}
+            return {"message": f"Cleared {deleted} temporary files", "count": deleted}
+            
+        except Exception as e:
+            logger.error(f"Clear temp error: {str(e)}")
+            imports_ns.abort(HTTP_STATUS.INTERNAL_SERVER_ERROR, f"Failed to clear temp files: {str(e)}")

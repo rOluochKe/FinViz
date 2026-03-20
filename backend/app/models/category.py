@@ -2,10 +2,11 @@
 Category model for transaction categorization.
 """
 
+import uuid
 from datetime import datetime
 
 from sqlalchemy import CheckConstraint, Index, text
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 
 from app.extensions import db
 
@@ -17,7 +18,8 @@ class Category(db.Model):
 
     __tablename__ = "categories"
 
-    id = db.Column(db.Integer, primary_key=True)
+    # Primary key - using UUID
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = db.Column(db.String(50), nullable=False)
     type = db.Column(db.String(20), nullable=False, default="expense")
     color = db.Column(db.String(7), default="#808080")
@@ -26,12 +28,15 @@ class Category(db.Model):
 
     # Hierarchy support
     parent_id = db.Column(
-        db.Integer, db.ForeignKey("categories.id", ondelete="SET NULL"), index=True
+        UUID(as_uuid=True), 
+        db.ForeignKey("categories.id", ondelete="SET NULL"), 
+        index=True,
+        nullable=True
     )
 
     # Ownership (null for system categories)
     user_id = db.Column(
-        db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), index=True
+        UUID(as_uuid=True), db.ForeignKey("users.id", ondelete="CASCADE"), index=True
     )
 
     # System vs custom
@@ -56,12 +61,13 @@ class Category(db.Model):
     )
     budgets = db.relationship(
         "Budget",
-        back_populates="category",  # Changed from backref='category'
+        back_populates="category",
         lazy="dynamic",
     )
     children = db.relationship(
         "Category", backref=db.backref("parent", remote_side=[id]), lazy="dynamic"
     )
+    user = db.relationship("User", back_populates="categories")
 
     # Constraints and indexes
     __table_args__ = (
@@ -94,29 +100,21 @@ class Category(db.Model):
             text(
                 "SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE category_id = :cat_id"
             ),
-            {"cat_id": self.id},
+            {"cat_id": str(self.id)},
         ).scalar()
         return float(result or 0)
 
     def to_dict(self, include_stats=False):
-        """
-        Convert category to dictionary.
-
-        Args:
-            include_stats: Include transaction statistics
-
-        Returns:
-            dict: Category data
-        """
+        """Convert category to dictionary."""
         data = {
-            "id": self.id,
+            "id": str(self.id),
             "name": self.name,
             "type": self.type,
             "color": self.color,
             "icon": self.icon,
             "description": self.description,
-            "parent_id": self.parent_id,
-            "user_id": self.user_id,
+            "parent_id": str(self.parent_id) if self.parent_id else None,
+            "user_id": str(self.user_id) if self.user_id else None,
             "is_system": self.is_system,
             "is_active": self.is_active,
             "meta_data": self.meta_data,

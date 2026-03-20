@@ -2,9 +2,11 @@
 Budget model for spending limits by category.
 """
 
+import uuid
 from datetime import date, datetime
 
 from sqlalchemy import CheckConstraint, Index, text
+from sqlalchemy.dialects.postgresql import UUID
 
 from app.extensions import db
 
@@ -16,17 +18,18 @@ class Budget(db.Model):
 
     __tablename__ = "budgets"
 
-    id = db.Column(db.Integer, primary_key=True)
+    # Primary key - using UUID
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
 
     # Foreign keys
     user_id = db.Column(
-        db.Integer,
+        UUID(as_uuid=True),
         db.ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
     category_id = db.Column(
-        db.Integer,
+        UUID(as_uuid=True),
         db.ForeignKey("categories.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
@@ -52,6 +55,7 @@ class Budget(db.Model):
 
     # Relationships - use back_populates
     category = db.relationship("Category", back_populates="budgets", lazy="joined")
+    user = db.relationship("User", back_populates="budgets")
 
     # Indexes and constraints
     __table_args__ = (
@@ -89,7 +93,7 @@ class Budget(db.Model):
                 AND type = 'expense'
         """
 
-        params = {"user_id": self.user_id, "cat_id": self.category_id}
+        params = {"user_id": str(self.user_id), "cat_id": str(self.category_id)}
 
         if self.period == "monthly":
             query += " AND EXTRACT(YEAR FROM date) = :year AND EXTRACT(MONTH FROM date) = :month"
@@ -195,8 +199,8 @@ class Budget(db.Model):
                     AND date >= :cutoff
             """),
             {
-                "user_id": self.user_id,
-                "cat_id": self.category_id,
+                "user_id": str(self.user_id),
+                "cat_id": str(self.category_id),
                 "cutoff": thirty_days_ago,
             },
         ).scalar()
@@ -225,9 +229,9 @@ class Budget(db.Model):
             dict: Budget data
         """
         data = {
-            "id": self.id,
-            "user_id": self.user_id,
-            "category_id": self.category_id,
+            "id": str(self.id),
+            "user_id": str(self.user_id) if self.user_id else None,
+            "category_id": str(self.category_id) if self.category_id else None,
             "amount": float(self.amount),
             "period": self.period,
             "month": self.month,
