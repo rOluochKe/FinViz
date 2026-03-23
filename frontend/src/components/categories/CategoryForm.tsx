@@ -23,7 +23,7 @@ interface CategoryFormData {
   color: string;
   icon?: string;
   description?: string;
-  parent_id?: number | null;
+  parent_id?: string | null;
 }
 
 // Define the API response type
@@ -53,7 +53,7 @@ const schema = yup.object().shape({
     .matches(/^#[0-9A-F]{6}$/i, 'Invalid color format'),
   icon: yup.string().optional(),
   description: yup.string().optional().max(200),
-  parent_id: yup.number().nullable().optional(),
+  parent_id: yup.string().nullable().optional(),
 });
 
 const CategoryForm: React.FC<CategoryFormProps> = ({ initialData, onSubmit, onCancel }) => {
@@ -77,7 +77,7 @@ const CategoryForm: React.FC<CategoryFormProps> = ({ initialData, onSubmit, onCa
           color: initialData.color,
           icon: initialData.icon || '',
           description: initialData.description || '',
-          parent_id: initialData.parent_id ?? null,
+          parent_id: initialData.parent_id || null,
         }
       : {
           type: 'expense',
@@ -94,7 +94,9 @@ const CategoryForm: React.FC<CategoryFormProps> = ({ initialData, onSubmit, onCa
     const loadCategories = async () => {
       try {
         const response = await api.get<CategoriesResponse>('/categories');
-        setCategories(response.categories || []);
+        // Handle response format
+        const categoriesList = Array.isArray(response) ? response : response.categories || [];
+        setCategories(categoriesList);
       } catch (error) {
         console.error('Failed to load categories:', error);
       }
@@ -110,7 +112,12 @@ const CategoryForm: React.FC<CategoryFormProps> = ({ initialData, onSubmit, onCa
   const onSubmitForm = async (data: CategoryFormData) => {
     setLoading(true);
     try {
-      await onSubmit(data);
+      // Ensure parent_id is null if empty string
+      const submitData = {
+        ...data,
+        parent_id: data.parent_id === '' || data.parent_id === 'null' ? null : data.parent_id,
+      };
+      await onSubmit(submitData);
     } finally {
       setLoading(false);
     }

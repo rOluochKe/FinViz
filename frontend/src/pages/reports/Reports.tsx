@@ -8,15 +8,13 @@ import {
   DocumentTextIcon,
 } from '@heroicons/react/24/outline';
 
-import toast from 'react-hot-toast';
-
 import Button from '../../components/common/Button';
 import Modal from '../../components/common/Modal';
 import CategoryReport from '../../components/reports/CategoryReport';
 import ComparisonReport from '../../components/reports/ComparisonReport';
 import MonthlyReport from '../../components/reports/MonthlyReport';
-import ReportCard from '../../components/reports/ReportCard';
 import YearlyReport from '../../components/reports/YearlyReport';
+import categoryService from '../../services/categories';
 import reportsService from '../../services/reports';
 import {
   CategoryReport as CategoryReportType,
@@ -24,12 +22,14 @@ import {
   MonthlyReport as MonthlyReportType,
   YearlyReport as YearlyReportType,
 } from '../../types';
+import showToast from '../../utils/toast';
 
 type ReportType = 'monthly' | 'yearly' | 'category' | 'comparison';
 
 const Reports: React.FC = () => {
   const [loading, setLoading] = useState(false);
-  const [availableReports, setAvailableReports] = useState<any>(null);
+  const [exportLoading, setExportLoading] = useState(false);
+  const [, setAvailableReports] = useState<any>(null);
 
   // Report data states
   const [monthlyReport, setMonthlyReport] = useState<MonthlyReportType | null>(null);
@@ -45,9 +45,13 @@ const Reports: React.FC = () => {
   // Form states
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
-  const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
-  const [period1, setPeriod1] = useState('');
-  const [period2, setPeriod2] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('');
+  const [period1, setPeriod1] = useState(
+    `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`
+  );
+  const [period2, setPeriod2] = useState(
+    `${new Date().getFullYear()}-${String(new Date().getMonth()).padStart(2, '0')}`
+  );
   const [months, setMonths] = useState(12);
 
   // Categories for category report
@@ -60,11 +64,11 @@ const Reports: React.FC = () => {
         setAvailableReports(reports);
 
         // Load categories for category report
-        const categoriesRes = await import('../../services/categories').then((m) => m.default);
-        const cats = await categoriesRes.getCategories();
+        const cats = await categoryService.getCategories();
         setCategories(cats);
       } catch (error) {
         console.error('Failed to load initial data:', error);
+        showToast.error('Failed to load initial data');
       }
     };
     loadInitialData();
@@ -97,8 +101,8 @@ const Reports: React.FC = () => {
       );
       setModalType('monthly');
       setIsModalOpen(true);
-    } catch (error) {
-      toast.error('Failed to load monthly report');
+    } catch (error: any) {
+      showToast.error(error?.message || 'Failed to load monthly report');
     } finally {
       setLoading(false);
     }
@@ -108,12 +112,16 @@ const Reports: React.FC = () => {
     setLoading(true);
     try {
       const report = await reportsService.getYearlyReport(selectedYear);
-      setYearlyReport(report);
-      setModalTitle(`Yearly Report - ${selectedYear}`);
-      setModalType('yearly');
-      setIsModalOpen(true);
-    } catch (error) {
-      toast.error('Failed to load yearly report');
+      if (report && report.monthly && report.monthly.length > 0) {
+        setYearlyReport(report);
+        setModalTitle(`Yearly Report - ${selectedYear}`);
+        setModalType('yearly');
+        setIsModalOpen(true);
+      } else {
+        showToast.info(`No transaction data found for year ${selectedYear}`);
+      }
+    } catch (error: any) {
+      showToast.error(error?.message || 'Failed to load yearly report');
     } finally {
       setLoading(false);
     }
@@ -121,19 +129,23 @@ const Reports: React.FC = () => {
 
   const handleViewCategory = async () => {
     if (!selectedCategory) {
-      toast.error('Please select a category');
+      showToast.error('Please select a category');
       return;
     }
     setLoading(true);
     try {
       const report = await reportsService.getCategoryReport(selectedCategory, months);
-      setCategoryReport(report);
-      const category = categories.find((c) => c.id === selectedCategory);
-      setModalTitle(`Category Report - ${category?.name || 'Unknown'}`);
-      setModalType('category');
-      setIsModalOpen(true);
-    } catch (error) {
-      toast.error('Failed to load category report');
+      if (report && report.category) {
+        setCategoryReport(report);
+        const category = categories.find((c) => c.id === selectedCategory);
+        setModalTitle(`Category Report - ${category?.name || 'Unknown'}`);
+        setModalType('category');
+        setIsModalOpen(true);
+      } else {
+        showToast.info('No data found for this category');
+      }
+    } catch (error: any) {
+      showToast.error(error?.message || 'Failed to load category report');
     } finally {
       setLoading(false);
     }
@@ -141,9 +153,16 @@ const Reports: React.FC = () => {
 
   const handleViewComparison = async () => {
     if (!period1 || !period2) {
-      toast.error('Please select both periods');
+      showToast.error('Please select both periods');
       return;
     }
+
+    const periodRegex = /^\d{4}-\d{2}$/;
+    if (!periodRegex.test(period1) || !periodRegex.test(period2)) {
+      showToast.error('Please use format YYYY-MM (e.g., 2024-01)');
+      return;
+    }
+
     setLoading(true);
     try {
       const report = await reportsService.comparePeriods(period1, period2);
@@ -151,31 +170,48 @@ const Reports: React.FC = () => {
       setModalTitle(`Comparison: ${period1} vs ${period2}`);
       setModalType('comparison');
       setIsModalOpen(true);
-    } catch (error) {
-      toast.error('Failed to load comparison');
+    } catch (error: any) {
+      showToast.error(error?.message || 'Failed to load comparison');
     } finally {
       setLoading(false);
     }
   };
 
   const handleExportMonthly = async () => {
+    setExportLoading(true);
     try {
       const blob = await reportsService.exportMonthlyReport(selectedYear, selectedMonth);
       reportsService.downloadPDF(blob, `monthly_report_${selectedYear}_${selectedMonth}.pdf`);
-      toast.success('Report downloaded');
-    } catch (error) {
-      toast.error('Failed to export report');
+      showToast.success('Report downloaded');
+    } catch (error: any) {
+      showToast.error(error?.message || 'Failed to export report');
+    } finally {
+      setExportLoading(false);
     }
   };
 
   const handleExportYearly = async () => {
+    setExportLoading(true);
     try {
       const blob = await reportsService.exportYearlyReport(selectedYear);
       reportsService.downloadPDF(blob, `yearly_report_${selectedYear}.pdf`);
-      toast.success('Report downloaded');
-    } catch (error) {
-      toast.error('Failed to export report');
+      showToast.success('Report downloaded');
+    } catch (error: any) {
+      showToast.error(error?.message || 'Failed to export report');
+    } finally {
+      setExportLoading(false);
     }
+  };
+
+  const getCurrentMonth = () => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  };
+
+  const getPreviousMonth = () => {
+    const now = new Date();
+    const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    return `${prevMonth.getFullYear()}-${String(prevMonth.getMonth() + 1).padStart(2, '0')}`;
   };
 
   return (
@@ -188,203 +224,229 @@ const Reports: React.FC = () => {
         </div>
       </div>
 
-      {/* Report Generator - 4 Column Layout */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {/* Monthly Report */}
-        <div className="bg-white rounded-lg shadow-lg p-6 hover:shadow-xl transition-shadow duration-300">
-          <div className="flex items-center mb-4">
-            <div className="p-2 bg-blue-100 rounded-lg">
-              <DocumentTextIcon className="h-6 w-6 text-blue-600" />
+      {/* Report Cards - 2x2 Grid Layout */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-5xl mx-auto">
+        {/* Monthly Report Card */}
+        <div className="bg-gradient-to-br from-blue-50 to-white rounded-xl shadow-lg border border-blue-100 hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
+          <div className="p-6">
+            <div className="flex items-center mb-4">
+              <div className="p-3 bg-blue-500 rounded-xl shadow-md">
+                <DocumentTextIcon className="h-6 w-6 text-white" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 ml-3">Monthly Report</h3>
             </div>
-            <h3 className="text-lg font-semibold text-gray-900 ml-3">Monthly Report</h3>
-          </div>
-          <p className="text-sm text-gray-500 mb-4 min-h-[40px]">
-            Detailed breakdown of income and expenses for a specific month
-          </p>
+            <p className="text-sm text-gray-500 mb-4">
+              Detailed breakdown of income and expenses for a specific month
+            </p>
 
-          <div className="space-y-3 mb-4">
-            <select
-              value={selectedYear}
-              onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-              className="input-field text-sm w-full"
-            >
-              {yearOptions.map((year) => (
-                <option key={year} value={year}>
-                  {year}
-                </option>
-              ))}
-            </select>
-            <select
-              value={selectedMonth}
-              onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
-              className="input-field text-sm w-full"
-            >
-              {monthOptions.map((month) => (
-                <option key={month.value} value={month.value}>
-                  {month.label}
-                </option>
-              ))}
-            </select>
-          </div>
+            <div className="space-y-3 mb-4">
+              <select
+                value={selectedYear}
+                onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+              >
+                {yearOptions.map((year) => (
+                  <option key={year} value={year}>
+                    {year}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+              >
+                {monthOptions.map((month) => (
+                  <option key={month.value} value={month.value}>
+                    {month.label}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-          <div className="flex space-x-2">
-            <Button onClick={handleViewMonthly} isLoading={loading} size="sm" className="flex-1">
+            <div className="flex space-x-2">
+              <Button
+                onClick={handleViewMonthly}
+                isLoading={loading}
+                size="sm"
+                className="flex-1 bg-blue-600 hover:bg-blue-700"
+              >
+                View
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={handleExportMonthly}
+                isLoading={exportLoading}
+                size="sm"
+                className="flex-1"
+              >
+                <ArrowDownTrayIcon className="h-4 w-4 mr-1" />
+                PDF
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        {/* Yearly Report Card */}
+        <div className="bg-gradient-to-br from-green-50 to-white rounded-xl shadow-lg border border-green-100 hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
+          <div className="p-6">
+            <div className="flex items-center mb-4">
+              <div className="p-3 bg-green-500 rounded-xl shadow-md">
+                <DocumentDuplicateIcon className="h-6 w-6 text-white" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 ml-3">Yearly Report</h3>
+            </div>
+            <p className="text-sm text-gray-500 mb-4">
+              Annual summary with monthly breakdown and trends
+            </p>
+
+            <div className="space-y-3 mb-4">
+              <select
+                value={selectedYear}
+                onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm"
+              >
+                {yearOptions.map((year) => (
+                  <option key={year} value={year}>
+                    {year}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex space-x-2">
+              <Button
+                onClick={handleViewYearly}
+                isLoading={loading}
+                size="sm"
+                className="flex-1 bg-green-600 hover:bg-green-700"
+              >
+                View
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={handleExportYearly}
+                isLoading={exportLoading}
+                size="sm"
+                className="flex-1"
+              >
+                <ArrowDownTrayIcon className="h-4 w-4 mr-1" />
+                PDF
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        {/* Category Report Card */}
+        <div className="bg-gradient-to-br from-purple-50 to-white rounded-xl shadow-lg border border-purple-100 hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
+          <div className="p-6">
+            <div className="flex items-center mb-4">
+              <div className="p-3 bg-purple-500 rounded-xl shadow-md">
+                <ChartBarIcon className="h-6 w-6 text-white" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 ml-3">Category Report</h3>
+            </div>
+            <p className="text-sm text-gray-500 mb-4">Detailed analysis for a specific category</p>
+
+            <div className="space-y-3 mb-4">
+              <select
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
+              >
+                <option value="">Select a category</option>
+                {categories.map((cat) => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.name} ({cat.type})
+                  </option>
+                ))}
+              </select>
+              <select
+                value={months}
+                onChange={(e) => setMonths(parseInt(e.target.value))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
+              >
+                <option value="3">Last 3 months</option>
+                <option value="6">Last 6 months</option>
+                <option value="12">Last 12 months</option>
+                <option value="24">Last 24 months</option>
+              </select>
+            </div>
+
+            <Button
+              onClick={handleViewCategory}
+              isLoading={loading}
+              size="sm"
+              fullWidth
+              className="bg-purple-600 hover:bg-purple-700"
+            >
               View Report
             </Button>
-            <Button variant="secondary" onClick={handleExportMonthly} size="sm" className="flex-1">
-              <ArrowDownTrayIcon className="h-4 w-4 mr-1" />
-              PDF
-            </Button>
           </div>
         </div>
 
-        {/* Yearly Report */}
-        <div className="bg-white rounded-lg shadow-lg p-6 hover:shadow-xl transition-shadow duration-300">
-          <div className="flex items-center mb-4">
-            <div className="p-2 bg-green-100 rounded-lg">
-              <DocumentDuplicateIcon className="h-6 w-6 text-green-600" />
+        {/* Period Comparison Card */}
+        <div className="bg-gradient-to-br from-orange-50 to-white rounded-xl shadow-lg border border-orange-100 hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
+          <div className="p-6">
+            <div className="flex items-center mb-4">
+              <div className="p-3 bg-orange-500 rounded-xl shadow-md">
+                <CalendarIcon className="h-6 w-6 text-white" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 ml-3">Period Comparison</h3>
             </div>
-            <h3 className="text-lg font-semibold text-gray-900 ml-3">Yearly Report</h3>
-          </div>
-          <p className="text-sm text-gray-500 mb-4 min-h-[40px]">
-            Annual summary with monthly breakdown and trends
-          </p>
+            <p className="text-sm text-gray-500 mb-4">Compare two monthly periods side by side</p>
 
-          <div className="space-y-3 mb-4">
-            <select
-              value={selectedYear}
-              onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-              className="input-field text-sm w-full"
+            <div className="space-y-3 mb-4">
+              <input
+                type="text"
+                placeholder="Period 1 (YYYY-MM)"
+                value={period1}
+                onChange={(e) => setPeriod1(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent text-sm"
+              />
+              <input
+                type="text"
+                placeholder="Period 2 (YYYY-MM)"
+                value={period2}
+                onChange={(e) => setPeriod2(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent text-sm"
+              />
+              <div className="flex justify-end">
+                <button
+                  onClick={() => {
+                    setPeriod1(getCurrentMonth());
+                    setPeriod2(getPreviousMonth());
+                  }}
+                  className="text-xs text-orange-600 hover:text-orange-700 font-medium"
+                >
+                  Use current month →
+                </button>
+              </div>
+            </div>
+
+            <Button
+              onClick={handleViewComparison}
+              isLoading={loading}
+              size="sm"
+              fullWidth
+              className="bg-orange-600 hover:bg-orange-700"
             >
-              {yearOptions.map((year) => (
-                <option key={year} value={year}>
-                  {year}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="flex space-x-2">
-            <Button onClick={handleViewYearly} isLoading={loading} size="sm" className="flex-1">
-              View Report
+              Compare
             </Button>
-            <Button variant="secondary" onClick={handleExportYearly} size="sm" className="flex-1">
-              <ArrowDownTrayIcon className="h-4 w-4 mr-1" />
-              PDF
-            </Button>
           </div>
-        </div>
-
-        {/* Category Report */}
-        <div className="bg-white rounded-lg shadow-lg p-6 hover:shadow-xl transition-shadow duration-300">
-          <div className="flex items-center mb-4">
-            <div className="p-2 bg-purple-100 rounded-lg">
-              <ChartBarIcon className="h-6 w-6 text-purple-600" />
-            </div>
-            <h3 className="text-lg font-semibold text-gray-900 ml-3">Category Report</h3>
-          </div>
-          <p className="text-sm text-gray-500 mb-4 min-h-[40px]">
-            Detailed analysis for a specific category
-          </p>
-
-          <div className="space-y-3 mb-4">
-            <select
-              value={selectedCategory || ''}
-              onChange={(e) => setSelectedCategory(parseInt(e.target.value))}
-              className="input-field text-sm w-full"
-            >
-              <option value="">Select a category</option>
-              {categories.map((cat) => (
-                <option key={cat.id} value={cat.id}>
-                  {cat.name}
-                </option>
-              ))}
-            </select>
-            <select
-              value={months}
-              onChange={(e) => setMonths(parseInt(e.target.value))}
-              className="input-field text-sm w-full"
-            >
-              <option value="3">Last 3 months</option>
-              <option value="6">Last 6 months</option>
-              <option value="12">Last 12 months</option>
-              <option value="24">Last 24 months</option>
-            </select>
-          </div>
-
-          <Button onClick={handleViewCategory} isLoading={loading} size="sm" fullWidth>
-            View Report
-          </Button>
-        </div>
-
-        {/* Period Comparison */}
-        <div className="bg-white rounded-lg shadow-lg p-6 hover:shadow-xl transition-shadow duration-300">
-          <div className="flex items-center mb-4">
-            <div className="p-2 bg-orange-100 rounded-lg">
-              <CalendarIcon className="h-6 w-6 text-orange-600" />
-            </div>
-            <h3 className="text-lg font-semibold text-gray-900 ml-3">Period Comparison</h3>
-          </div>
-          <p className="text-sm text-gray-500 mb-4 min-h-[40px]">
-            Compare two monthly periods side by side
-          </p>
-
-          <div className="space-y-3 mb-4">
-            <input
-              type="text"
-              placeholder="Period 1 (YYYY-MM)"
-              value={period1}
-              onChange={(e) => setPeriod1(e.target.value)}
-              className="input-field text-sm w-full"
-            />
-            <input
-              type="text"
-              placeholder="Period 2 (YYYY-MM)"
-              value={period2}
-              onChange={(e) => setPeriod2(e.target.value)}
-              className="input-field text-sm w-full"
-            />
-          </div>
-
-          <Button onClick={handleViewComparison} isLoading={loading} size="sm" fullWidth>
-            Compare
-          </Button>
         </div>
       </div>
-
-      {/* Available Reports */}
-      {availableReports && availableReports.reports && (
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Available Reports</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {availableReports.reports.map((report: any) => (
-              <ReportCard
-                key={report.type}
-                title={report.type.charAt(0).toUpperCase() + report.type.slice(1)}
-                description={report.description}
-                date="Ready to generate"
-                type={report.type}
-                onView={() => {
-                  // Handle view based on report type
-                  if (report.type === 'monthly') {
-                    setSelectedYear(new Date().getFullYear());
-                    setSelectedMonth(new Date().getMonth() + 1);
-                    handleViewMonthly();
-                  } else if (report.type === 'yearly') {
-                    setSelectedYear(new Date().getFullYear());
-                    handleViewYearly();
-                  }
-                }}
-              />
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* Report Modals */}
       <Modal
         isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+        onClose={() => {
+          setIsModalOpen(false);
+          setMonthlyReport(null);
+          setYearlyReport(null);
+          setCategoryReport(null);
+          setComparisonReport(null);
+        }}
         title={modalTitle}
         size="xl"
       >
@@ -393,6 +455,11 @@ const Reports: React.FC = () => {
         {modalType === 'category' && categoryReport && <CategoryReport report={categoryReport} />}
         {modalType === 'comparison' && comparisonReport && (
           <ComparisonReport report={comparisonReport} />
+        )}
+        {modalType === 'yearly' && !yearlyReport && (
+          <div className="text-center py-8">
+            <p className="text-gray-500">No data available for year {selectedYear}</p>
+          </div>
         )}
       </Modal>
     </div>

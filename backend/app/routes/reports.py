@@ -2,49 +2,19 @@
 Report routes with Flask-RESTX.
 """
 
-import logging
 import uuid
-from datetime import datetime
-from functools import wraps
 
 from flask import request, send_file
 from flask_jwt_extended import get_jwt_identity, jwt_required
 from flask_restx import Namespace, Resource, fields
 
-from app.extensions import cache
 from app.services.export_service import ExportService
 from app.services.report_service import ReportService
 from app.utils.constants import HTTP_STATUS
+from app.utils.decorators import safe_cache_cached
 
 # Create namespace
 reports_ns = Namespace("reports", description="Financial report operations")
-
-logger = logging.getLogger(__name__)
-
-# ============================================================================
-# Helper Decorator for Safe Caching
-# ============================================================================
-
-
-def safe_cache_cached(timeout=300):
-    """
-    Decorator that safely handles cache unavailability.
-    If Redis is not available, it skips caching and executes the function directly.
-    """
-
-    def decorator(f):
-        @wraps(f)
-        def decorated_function(*args, **kwargs):
-            try:
-                # Try to use cache if available
-                return cache.cached(timeout=timeout)(f)(*args, **kwargs)
-            except Exception as e:
-                logger.debug(f"Cache unavailable, skipping cache: {str(e)}")
-                return f(*args, **kwargs)
-
-        return decorated_function
-
-    return decorator
 
 
 # ============================================================================
@@ -186,250 +156,7 @@ error_response = reports_ns.model(
 # ============================================================================
 
 
-@reports_ns.route("/monthly/<int:year>/<int:month>")
-@reports_ns.param("year", "Year", required=True)
-@reports_ns.param("month", "Month (1-12)", required=True)
-class MonthlyReport(Resource):
-    @reports_ns.doc(
-        description="Generate detailed monthly financial report",
-        security="Bearer Auth",
-        responses={
-            200: "Monthly report generated",
-            400: "Invalid year/month",
-            401: "Authentication required",
-        },
-    )
-    @reports_ns.marshal_with(monthly_report_model)
-    @jwt_required()
-    @safe_cache_cached(timeout=300)  # Use safe cache decorator
-    def get(self, year, month):
-        """Get monthly report"""
-        if month < 1 or month > 12:
-            reports_ns.abort(HTTP_STATUS.BAD_REQUEST, "Month must be between 1 and 12")
-
-        user_id = get_jwt_identity()
-        report = ReportService.monthly_report(user_id, year, month)
-        return report
-
-
-@reports_ns.route("/yearly/<int:year>")
-@reports_ns.param("year", "Year", required=True)
-class YearlyReport(Resource):
-    @reports_ns.doc(
-        description="Generate yearly financial report with monthly breakdown",
-        security="Bearer Auth",
-        responses={
-            200: "Yearly report generated",
-            400: "Invalid year",
-            401: "Authentication required",
-        },
-    )
-    @reports_ns.marshal_with(yearly_report_model)
-    @jwt_required()
-    @safe_cache_cached(timeout=600)  # Use safe cache decorator
-    def get(self, year):
-        """Get yearly report"""
-        user_id = get_jwt_identity()
-        report = ReportService.yearly_report(user_id, year)
-
-        # If there's an error in the report, it might be a string
-        if isinstance(report, dict) and "error" in report:
-            reports_ns.abort(HTTP_STATUS.NOT_FOUND, report["error"])
-
-        return report
-
-
-@reports_ns.route("/category/<string:category_id>")
-@reports_ns.param("category_id", "Category ID (UUID)", required=True)
-class CategoryReport(Resource):
-    @reports_ns.doc(
-        description="Get detailed report for a specific category",
-        security="Bearer Auth",
-        responses={
-            200: "Category report generated",
-            400: "Invalid parameters",
-            401: "Authentication required",
-            404: "Category not found",
-        },
-    )
-    @reports_ns.param(
-        "months",
-        "Number of months to analyze",
-        type="integer",
-        default=12,
-        min=1,
-        max=36,
-    )
-    @reports_ns.marshal_with(category_report_model)
-    @jwt_required()
-    def get(self, category_id):
-        """Get category-specific report"""
-        user_id = get_jwt_identity()
-        months = request.args.get("months", 12, type=int)
-
-        if months < 1 or months > 36:
-            reports_ns.abort(HTTP_STATUS.BAD_REQUEST, "Months must be between 1 and 36")
-
-        try:
-            category_uuid = uuid.UUID(category_id)
-        except ValueError:
-            reports_ns.abort(
-                HTTP_STATUS.BAD_REQUEST,
-                "Invalid category ID format. Must be a valid UUID.",
-            )
-
-        report = ReportService.category_report(user_id, category_uuid, months)
-
-        if isinstance(report, dict) and "error" in report:
-            reports_ns.abort(HTTP_STATUS.NOT_FOUND, report["error"])
-
-        return report
-
-
-@reports_ns.route("/export/monthly/<int:year>/<int:month>")
-@reports_ns.param("year", "Year", required=True)
-@reports_ns.param("month", "Month (1-12)", required=True)
-class ExportMonthlyReport(Resource):
-    @reports_ns.doc(
-        description="Export monthly report as PDF",
-        security="Bearer Auth",
-        responses={
-            200: "PDF file downloaded",
-            400: "Invalid parameters",
-            401: "Authentication required",
-        },
-    )
-    @jwt_required()
-    def get(self, year, month):
-        """Export monthly report as PDF"""
-        if month < 1 or month > 12:
-            reports_ns.abort(HTTP_STATUS.BAD_REQUEST, "Month must be between 1 and 12")
-
-        user_id = get_jwt_identity()
-        report = ReportService.monthly_report(user_id, year, month)
-
-        if isinstance(report, dict) and "error" in report:
-            reports_ns.abort(HTTP_STATUS.NOT_FOUND, report["error"])
-
-        # Convert to PDF
-        pdf_data = ExportService.to_pdf([report], f"Monthly Report {year}-{month:02d}")
-        filename = f"monthly_report_{year}_{month:02d}.pdf"
-
-        return send_file(
-            pdf_data,
-            mimetype="application/pdf",
-            as_attachment=True,
-            download_name=filename,
-        )
-
-
-@reports_ns.route("/export/yearly/<int:year>")
-@reports_ns.param("year", "Year", required=True)
-class ExportYearlyReport(Resource):
-    @reports_ns.doc(
-        description="Export yearly report as PDF",
-        security="Bearer Auth",
-        responses={
-            200: "PDF file downloaded",
-            400: "Invalid year",
-            401: "Authentication required",
-        },
-    )
-    @jwt_required()
-    def get(self, year):
-        """Export yearly report as PDF"""
-        user_id = get_jwt_identity()
-        report = ReportService.yearly_report(user_id, year)
-
-        if isinstance(report, dict) and "error" in report:
-            reports_ns.abort(HTTP_STATUS.NOT_FOUND, report["error"])
-
-        pdf_data = ExportService.to_pdf([report], f"Yearly Report {year}")
-        filename = f"yearly_report_{year}.pdf"
-
-        return send_file(
-            pdf_data,
-            mimetype="application/pdf",
-            as_attachment=True,
-            download_name=filename,
-        )
-
-
-@reports_ns.route("/comparison")
-class ComparePeriods(Resource):
-    @reports_ns.doc(
-        description="Compare two monthly periods",
-        security="Bearer Auth",
-        responses={
-            200: "Comparison generated",
-            400: "Invalid period format",
-            401: "Authentication required",
-        },
-    )
-    @reports_ns.param(
-        "period1", "First period (YYYY-MM)", required=True, example="2024-01"
-    )
-    @reports_ns.param(
-        "period2", "Second period (YYYY-MM)", required=True, example="2024-02"
-    )
-    @reports_ns.marshal_with(comparison_report_model)
-    @jwt_required()
-    def get(self):
-        """Compare two periods"""
-        user_id = get_jwt_identity()
-
-        period1 = request.args.get("period1")
-        period2 = request.args.get("period2")
-
-        if not period1 or not period2:
-            reports_ns.abort(
-                HTTP_STATUS.BAD_REQUEST, "Both period1 and period2 are required"
-            )
-
-        # Parse periods (expects YYYY-MM)
-        try:
-            y1, m1 = map(int, period1.split("-"))
-            y2, m2 = map(int, period2.split("-"))
-        except (ValueError, AttributeError):
-            reports_ns.abort(
-                HTTP_STATUS.BAD_REQUEST,
-                "Invalid period format. Use YYYY-MM (e.g., 2024-01)",
-            )
-
-        # Validate months
-        if not (1 <= m1 <= 12 and 1 <= m2 <= 12):
-            reports_ns.abort(HTTP_STATUS.BAD_REQUEST, "Month must be between 1 and 12")
-
-        report1 = ReportService.monthly_report(user_id, y1, m1)
-        report2 = ReportService.monthly_report(user_id, y2, m2)
-
-        # Check for errors
-        if isinstance(report1, dict) and "error" in report1:
-            reports_ns.abort(
-                HTTP_STATUS.NOT_FOUND, f"Period1 error: {report1['error']}"
-            )
-        if isinstance(report2, dict) and "error" in report2:
-            reports_ns.abort(
-                HTTP_STATUS.NOT_FOUND, f"Period2 error: {report2['error']}"
-            )
-
-        comparison = {
-            "period1": report1,
-            "period2": report2,
-            "differences": {
-                "income": report2["summary"]["income"] - report1["summary"]["income"],
-                "expense": report2["summary"]["expense"]
-                - report1["summary"]["expense"],
-                "savings": report2["summary"]["savings"]
-                - report1["summary"]["savings"],
-                "rate": report2["summary"]["rate"] - report1["summary"]["rate"],
-                "count": report2["summary"]["count"] - report1["summary"]["count"],
-            },
-        }
-
-        return comparison
-
-
+# 1. First, define the static routes (no parameters)
 @reports_ns.route("/available")
 class AvailableReports(Resource):
     @reports_ns.doc(
@@ -438,7 +165,7 @@ class AvailableReports(Resource):
         responses={200: "Available reports retrieved"},
     )
     @jwt_required()
-    @safe_cache_cached(timeout=3600)  # Cache for 1 hour, handles Redis failure
+    @safe_cache_cached(timeout=3600)
     def get(self):
         """Get available report types"""
         return {
@@ -474,6 +201,299 @@ class AvailableReports(Resource):
         }
 
 
+# 2. Then define comparison route
+@reports_ns.route("/comparison")
+class ComparePeriods(Resource):
+    @reports_ns.doc(
+        description="Compare two monthly periods",
+        security="Bearer Auth",
+        responses={
+            200: "Comparison generated",
+            400: "Invalid period format",
+            401: "Authentication required",
+        },
+    )
+    @reports_ns.param(
+        "period1", "First period (YYYY-MM)", required=True, example="2024-01"
+    )
+    @reports_ns.param(
+        "period2", "Second period (YYYY-MM)", required=True, example="2024-02"
+    )
+    @reports_ns.marshal_with(comparison_report_model)
+    @jwt_required()
+    def get(self):
+        """Compare two periods"""
+        user_id = get_jwt_identity()
+
+        if isinstance(user_id, str):
+            try:
+                user_uuid = uuid.UUID(user_id)
+            except ValueError:
+                reports_ns.abort(HTTP_STATUS.BAD_REQUEST, "Invalid user ID format")
+        else:
+            user_uuid = user_id
+
+        period1 = request.args.get("period1")
+        period2 = request.args.get("period2")
+
+        if not period1 or not period2:
+            reports_ns.abort(
+                HTTP_STATUS.BAD_REQUEST, "Both period1 and period2 are required"
+            )
+
+        try:
+            y1, m1 = map(int, period1.split("-"))
+            y2, m2 = map(int, period2.split("-"))
+        except (ValueError, AttributeError):
+            reports_ns.abort(
+                HTTP_STATUS.BAD_REQUEST,
+                "Invalid period format. Use YYYY-MM (e.g., 2024-01)",
+            )
+
+        if not (1 <= m1 <= 12 and 1 <= m2 <= 12):
+            reports_ns.abort(HTTP_STATUS.BAD_REQUEST, "Month must be between 1 and 12")
+
+        report1 = ReportService.monthly_report(user_uuid, y1, m1)
+        report2 = ReportService.monthly_report(user_uuid, y2, m2)
+
+        if isinstance(report1, dict) and "error" in report1:
+            reports_ns.abort(
+                HTTP_STATUS.NOT_FOUND, f"Period1 error: {report1['error']}"
+            )
+        if isinstance(report2, dict) and "error" in report2:
+            reports_ns.abort(
+                HTTP_STATUS.NOT_FOUND, f"Period2 error: {report2['error']}"
+            )
+
+        comparison = {
+            "period1": report1,
+            "period2": report2,
+            "differences": {
+                "income": report2["summary"]["income"] - report1["summary"]["income"],
+                "expense": report2["summary"]["expense"]
+                - report1["summary"]["expense"],
+                "savings": report2["summary"]["savings"]
+                - report1["summary"]["savings"],
+                "rate": report2["summary"]["rate"] - report1["summary"]["rate"],
+                "count": report2["summary"]["count"] - report1["summary"]["count"],
+            },
+        }
+
+        return comparison
+
+
+# 3. Then define export routes
+@reports_ns.route("/export/monthly/<int:year>/<int:month>")
+@reports_ns.param("year", "Year", required=True)
+@reports_ns.param("month", "Month (1-12)", required=True)
+class ExportMonthlyReport(Resource):
+    @reports_ns.doc(
+        description="Export monthly report as PDF",
+        security="Bearer Auth",
+        responses={
+            200: "PDF file downloaded",
+            400: "Invalid parameters",
+            401: "Authentication required",
+        },
+    )
+    @jwt_required()
+    def get(self, year, month):
+        """Export monthly report as PDF"""
+        if month < 1 or month > 12:
+            reports_ns.abort(HTTP_STATUS.BAD_REQUEST, "Month must be between 1 and 12")
+
+        user_id = get_jwt_identity()
+
+        if isinstance(user_id, str):
+            try:
+                user_uuid = uuid.UUID(user_id)
+            except ValueError:
+                reports_ns.abort(HTTP_STATUS.BAD_REQUEST, "Invalid user ID format")
+        else:
+            user_uuid = user_id
+
+        report = ReportService.monthly_report(user_uuid, year, month)
+
+        if isinstance(report, dict) and "error" in report:
+            reports_ns.abort(HTTP_STATUS.NOT_FOUND, report["error"])
+
+        pdf_data = ExportService.to_pdf([report], f"Monthly Report {year}-{month:02d}")
+        filename = f"monthly_report_{year}_{month:02d}.pdf"
+
+        return send_file(
+            pdf_data,
+            mimetype="application/pdf",
+            as_attachment=True,
+            download_name=filename,
+        )
+
+
+@reports_ns.route("/export/yearly/<int:year>")
+@reports_ns.param("year", "Year", required=True)
+class ExportYearlyReport(Resource):
+    @reports_ns.doc(
+        description="Export yearly report as PDF",
+        security="Bearer Auth",
+        responses={
+            200: "PDF file downloaded",
+            400: "Invalid year",
+            401: "Authentication required",
+        },
+    )
+    @jwt_required()
+    def get(self, year):
+        """Export yearly report as PDF"""
+        user_id = get_jwt_identity()
+
+        if isinstance(user_id, str):
+            try:
+                user_uuid = uuid.UUID(user_id)
+            except ValueError:
+                reports_ns.abort(HTTP_STATUS.BAD_REQUEST, "Invalid user ID format")
+        else:
+            user_uuid = user_id
+
+        report = ReportService.yearly_report(user_uuid, year)
+
+        if isinstance(report, dict) and "error" in report:
+            reports_ns.abort(HTTP_STATUS.NOT_FOUND, report["error"])
+
+        pdf_data = ExportService.to_pdf([report], f"Yearly Report {year}")
+        filename = f"yearly_report_{year}.pdf"
+
+        return send_file(
+            pdf_data,
+            mimetype="application/pdf",
+            as_attachment=True,
+            download_name=filename,
+        )
+
+
+# 4. Then define category route
+@reports_ns.route("/category/<string:category_id>")
+@reports_ns.param("category_id", "Category ID (UUID)", required=True)
+class CategoryReport(Resource):
+    @reports_ns.doc(
+        description="Get detailed report for a specific category",
+        security="Bearer Auth",
+        responses={
+            200: "Category report generated",
+            400: "Invalid parameters",
+            401: "Authentication required",
+            404: "Category not found",
+        },
+    )
+    @reports_ns.param(
+        "months",
+        "Number of months to analyze",
+        type="integer",
+        default=12,
+        min=1,
+        max=36,
+    )
+    @reports_ns.marshal_with(category_report_model)
+    @jwt_required()
+    def get(self, category_id):
+        """Get category-specific report"""
+        user_id = get_jwt_identity()
+        months = request.args.get("months", 12, type=int)
+
+        if months < 1 or months > 36:
+            reports_ns.abort(HTTP_STATUS.BAD_REQUEST, "Months must be between 1 and 36")
+
+        try:
+            category_uuid = uuid.UUID(category_id)
+        except ValueError:
+            reports_ns.abort(HTTP_STATUS.BAD_REQUEST, "Invalid category ID format")
+
+        if isinstance(user_id, str):
+            try:
+                user_uuid = uuid.UUID(user_id)
+            except ValueError:
+                reports_ns.abort(HTTP_STATUS.BAD_REQUEST, "Invalid user ID format")
+        else:
+            user_uuid = user_id
+
+        report = ReportService.category_report(user_uuid, category_uuid, months)
+
+        if isinstance(report, dict) and "error" in report:
+            reports_ns.abort(HTTP_STATUS.NOT_FOUND, report["error"])
+
+        return report
+
+
+# 5. Then define monthly and yearly routes with parameters
+@reports_ns.route("/monthly/<int:year>/<int:month>")
+@reports_ns.param("year", "Year", required=True)
+@reports_ns.param("month", "Month (1-12)", required=True)
+class MonthlyReport(Resource):
+    @reports_ns.doc(
+        description="Generate detailed monthly financial report",
+        security="Bearer Auth",
+        responses={
+            200: "Monthly report generated",
+            400: "Invalid year/month",
+            401: "Authentication required",
+        },
+    )
+    @reports_ns.marshal_with(monthly_report_model)
+    @jwt_required()
+    @safe_cache_cached(timeout=300)
+    def get(self, year, month):
+        """Get monthly report"""
+        if month < 1 or month > 12:
+            reports_ns.abort(HTTP_STATUS.BAD_REQUEST, "Month must be between 1 and 12")
+
+        user_id = get_jwt_identity()
+
+        if isinstance(user_id, str):
+            try:
+                user_uuid = uuid.UUID(user_id)
+            except ValueError:
+                reports_ns.abort(HTTP_STATUS.BAD_REQUEST, "Invalid user ID format")
+        else:
+            user_uuid = user_id
+
+        report = ReportService.monthly_report(user_uuid, year, month)
+        return report
+
+
+@reports_ns.route("/yearly/<int:year>")
+@reports_ns.param("year", "Year", required=True)
+class YearlyReport(Resource):
+    @reports_ns.doc(
+        description="Generate yearly financial report with monthly breakdown",
+        security="Bearer Auth",
+        responses={
+            200: "Yearly report generated",
+            400: "Invalid year",
+            401: "Authentication required",
+        },
+    )
+    @reports_ns.marshal_with(yearly_report_model)
+    @jwt_required()
+    @safe_cache_cached(timeout=600)
+    def get(self, year):
+        """Get yearly report"""
+        user_id = get_jwt_identity()
+
+        if isinstance(user_id, str):
+            try:
+                user_uuid = uuid.UUID(user_id)
+            except ValueError:
+                reports_ns.abort(HTTP_STATUS.BAD_REQUEST, "Invalid user ID format")
+        else:
+            user_uuid = user_id
+
+        report = ReportService.yearly_report(user_uuid, year)
+
+        if isinstance(report, dict) and "error" in report:
+            return {"message": report["error"]}, HTTP_STATUS.NOT_FOUND
+
+        return report
+
+
+# 6. Finally define summary route
 @reports_ns.route("/summary/<int:year>")
 @reports_ns.param("year", "Year", required=True)
 class YearSummary(Resource):
@@ -487,7 +507,16 @@ class YearSummary(Resource):
     def get(self, year):
         """Get year summary"""
         user_id = get_jwt_identity()
-        report = ReportService.yearly_report(user_id, year)
+
+        if isinstance(user_id, str):
+            try:
+                user_uuid = uuid.UUID(user_id)
+            except ValueError:
+                reports_ns.abort(HTTP_STATUS.BAD_REQUEST, "Invalid user ID format")
+        else:
+            user_uuid = user_id
+
+        report = ReportService.yearly_report(user_uuid, year)
 
         if isinstance(report, dict) and "error" in report:
             return {"summary": None, "message": report["error"]}

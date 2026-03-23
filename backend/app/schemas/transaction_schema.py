@@ -20,6 +20,8 @@ class TransactionSchema(SQLAlchemyAutoSchema):
         model = Transaction
         load_instance = True
         include_fk = True
+        # Include the relationship fields
+        include_relationships = True
 
     id = fields.UUID(dump_only=True)
     user_id = fields.UUID(load_only=True)
@@ -41,11 +43,11 @@ class TransactionSchema(SQLAlchemyAutoSchema):
     recurring_end_date = fields.Date(allow_none=True, format="%Y-%m-%d")
     created_at = fields.DateTime(dump_only=True, format="iso8601")
     updated_at = fields.DateTime(dump_only=True, format="iso8601")
-
-    # Computed fields
     formatted_amount = fields.String(dump_only=True)
-    category_name = fields.String(dump_only=True)
-    category_color = fields.String(dump_only=True)
+
+    # These will be populated from the relationship
+    category_name = fields.String(dump_only=True, attribute="category.name")
+    category_color = fields.String(dump_only=True, attribute="category.color")
 
     @pre_load
     def validate_amount_field(self, data, **kwargs):

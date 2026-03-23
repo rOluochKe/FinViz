@@ -11,6 +11,40 @@ from app.models.budget import Budget
 from app.utils.constants import BudgetPeriod
 
 
+class CustomDateTime(fields.DateTime):
+    """
+    Custom DateTime field that handles both ISO format and space-separated format.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def _serialize(self, value, attr, obj, **kwargs):
+        """Convert datetime to string in ISO format."""
+        if value is None:
+            return None
+
+        if isinstance(value, datetime):
+            return value.isoformat()
+
+        # If it's already a string, convert space to T for ISO format
+        if isinstance(value, str):
+            return value.replace(" ", "T")
+
+        return str(value)
+
+    def _deserialize(self, value, attr, data, **kwargs):
+        """Parse datetime string, handling both formats."""
+        if value is None:
+            return None
+
+        if isinstance(value, str):
+            # Replace space with T for ISO format
+            value = value.replace(" ", "T")
+
+        return super()._deserialize(value, attr, data, **kwargs)
+
+
 class BudgetSchema(SQLAlchemyAutoSchema):
     """Schema for budget serialization."""
 
@@ -35,8 +69,10 @@ class BudgetSchema(SQLAlchemyAutoSchema):
     is_active = fields.Boolean(load_default=True)
     rollover = fields.Boolean(load_default=False)
     notes = fields.String(allow_none=True, validate=validate.Length(max=500))
-    created_at = fields.DateTime(dump_only=True, format="%Y-%m-%d %H:%M:%S")
-    updated_at = fields.DateTime(dump_only=True, format="%Y-%m-%d %H:%M:%S")
+
+    # Use custom datetime field to handle both formats
+    created_at = CustomDateTime(dump_only=True)
+    updated_at = CustomDateTime(dump_only=True)
 
     # Computed fields
     spent = fields.Float(dump_only=True)

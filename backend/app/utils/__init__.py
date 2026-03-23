@@ -41,6 +41,9 @@ from app.utils.decorators import (
     paginate,
     rate_limit,
     retry,
+    safe_cache_cached,
+    safe_delete_memoized,
+    safe_rate_limit,
     timing,
     validate_request,
 )
@@ -126,6 +129,9 @@ __all__ = [
     "fresh_jwt_required",
     "deprecated",
     "retry",
+    "safe_rate_limit",
+    "safe_cache_cached",
+    "safe_delete_memoized",
     # Helpers
     "generate_uuid",
     "generate_token",

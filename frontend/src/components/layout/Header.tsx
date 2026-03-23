@@ -41,12 +41,14 @@ const Header: React.FC<HeaderProps> = ({ setSidebarOpen }) => {
             </button>
           )}
 
-          {/* Logo - always visible */}
-          <Link to="/" className="text-xl font-bold text-primary-600 ml-2 lg:ml-0">
-            FinViz Pro
-          </Link>
+          {/* Logo - only show when NOT authenticated */}
+          {!isAuthenticated && (
+            <Link to="/" className="text-xl font-bold text-primary-600 ml-2 lg:ml-0">
+              FinViz Pro
+            </Link>
+          )}
 
-          {/* Public Navigation - only show on public pages */}
+          {/* Public Navigation - only show on public pages when not authenticated */}
           {!isAuthenticated && isPublicPage && (
             <nav className="hidden md:flex ml-8 space-x-1">
               {publicNavItems.map((item) => {

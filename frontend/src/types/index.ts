@@ -3,7 +3,7 @@
 // ============================================================================
 
 export interface User {
-  id: number;
+  id: string;
   username: string;
   email: string;
   first_name?: string;
@@ -81,14 +81,14 @@ export interface PasswordResetConfirm {
 // ============================================================================
 
 export interface Category {
-  id: number;
+  id: string;
   name: string;
   type: 'income' | 'expense' | 'transfer';
   color: string;
   icon?: string | null;
   description?: string | null;
-  parent_id?: number | null;
-  user_id?: number;
+  parent_id?: string | null;
+  user_id?: string;
   is_system: boolean;
   is_active: boolean;
   transaction_count?: number;
@@ -104,7 +104,7 @@ export interface CategoryCreate {
   color?: string | null;
   icon?: string | null;
   description?: string | null;
-  parent_id?: number | null;
+  parent_id?: string | null;
 }
 
 export interface CategoryUpdate {
@@ -116,7 +116,7 @@ export interface CategoryUpdate {
 }
 
 export interface CategoryStats {
-  category_id: number;
+  category_id: string;
   category_name: string;
   category_type: string;
   color: string;
@@ -127,7 +127,7 @@ export interface CategoryStats {
 }
 
 export interface CategoryHierarchyNode {
-  id: number;
+  id: string;
   name: string;
   type: string;
   color: string;
@@ -141,9 +141,9 @@ export interface CategoryHierarchyNode {
 // ============================================================================
 
 export interface Transaction {
-  id: number;
-  user_id: number;
-  category_id: number;
+  id: string;
+  user_id: string;
+  category_id: string;
   category_name?: string | null;
   category_color?: string | null;
   amount: number;
@@ -162,7 +162,7 @@ export interface Transaction {
 }
 
 export interface TransactionCreate {
-  category_id: number;
+  category_id: string;
   amount: number;
   description: string;
   date: string;
@@ -175,7 +175,7 @@ export interface TransactionCreate {
 }
 
 export interface TransactionUpdate {
-  category_id?: number;
+  category_id?: string;
   amount?: number;
   description?: string;
   date?: string;
@@ -191,7 +191,7 @@ export interface TransactionFilter {
   per_page?: number;
   start_date?: string;
   end_date?: string;
-  category_id?: number;
+  category_id?: string;
   type?: 'income' | 'expense' | 'transfer';
   search?: string;
   min_amount?: number;
@@ -217,8 +217,8 @@ export interface PaginatedResponse<T> {
 // ============================================================================
 
 export interface Budget {
-  id: number;
-  category_id: number;
+  id: string;
+  category_id: string;
   category_name?: string | null;
   category_color?: string | null;
   amount: number;
@@ -232,19 +232,22 @@ export interface Budget {
   should_alert: boolean;
   alert_threshold?: number;
   is_active: boolean;
+  rollover?: boolean;
   notes?: string | null;
+  projection?: any;
   created_at: string;
   updated_at: string;
 }
 
 export interface BudgetCreate {
-  category_id: number;
+  category_id: string;
   amount: number;
   period: 'monthly' | 'quarterly' | 'yearly';
   month?: number | null;
   year: number;
   alert_threshold?: number;
   is_active?: boolean;
+  rollover?: boolean;
   notes?: string | null;
 }
 
@@ -252,12 +255,13 @@ export interface BudgetUpdate {
   amount?: number;
   alert_threshold?: number;
   is_active?: boolean;
+  rollover?: boolean;
   notes?: string | null;
 }
 
 export interface BudgetStatusType {
-  budget_id: number;
-  category_id: number;
+  budget_id: string;
+  category_id: string;
   category_name: string;
   category_color: string;
   budget_amount: number;
@@ -269,7 +273,7 @@ export interface BudgetStatusType {
 }
 
 export interface BudgetSuggestion {
-  category_id: number;
+  category_id: string;
   category_name: string;
   category_color: string;
   current_avg_monthly: number;
@@ -445,7 +449,7 @@ export interface YearlyReport extends ReportSummary {
 
 export interface CategoryReport {
   category: {
-    id: number;
+    id: string;
     name: string;
     color: string;
     type: string;
@@ -475,7 +479,7 @@ export interface ExportOptions {
   format: ExportFormat;
   start_date?: string;
   end_date?: string;
-  category_id?: number;
+  category_id?: string;
 }
 
 export interface ImportMapping {
@@ -739,7 +743,8 @@ export interface SpendingPatterns {
 }
 
 export interface Anomaly {
-  transaction_id?: number;
+  id?: string;
+  transaction_id?: string;
   date: string;
   amount: number;
   desc?: string;
@@ -782,7 +787,7 @@ export interface ForecastData {
 }
 
 export interface CategoryInsight {
-  category_id: number;
+  category_id: string;
   category: string;
   color: string;
   total: number;
@@ -856,7 +861,7 @@ export interface YearlyReport {
 
 export interface CategoryReport {
   category: {
-    id: number;
+    id: string;
     name: string;
     color: string;
     type: string;
@@ -966,7 +971,7 @@ export interface YearSummary {
 export interface ReportFilters {
   start_date?: string;
   end_date?: string;
-  category_id?: number;
+  category_id?: string;
   type?: 'income' | 'expense' | 'transfer';
   group_by?: 'day' | 'week' | 'month';
 }
@@ -1051,7 +1056,7 @@ export interface StorageStats {
     total_size_mb: number;
     total_users: number;
     users: Array<{
-      user_id: number;
+      user_id: string;
       usage: {
         receipts: { count: number; size: number; mb: number };
         exports: { count: number; size: number; mb: number };
@@ -1103,7 +1108,7 @@ export interface ExportOptions {
   format: ExportFormat;
   start_date?: string;
   end_date?: string;
-  category_id?: number;
+  category_id?: string;
 }
 
 export interface ExportFile {

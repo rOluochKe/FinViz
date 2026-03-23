@@ -2,56 +2,26 @@
 Budget routes with Flask-RESTX.
 """
 
-import logging
+# import logging
 import uuid
 from datetime import datetime
-from functools import wraps
 
 from flask import request
 from flask_jwt_extended import get_jwt_identity, jwt_required
 from flask_restx import Namespace, Resource, fields
 
-from app.extensions import cache, db
+from app.extensions import db
 from app.models.budget import Budget
 from app.models.category import Category
 from app.schemas.budget_schema import BudgetSchema
 from app.services.budget_service import BudgetService
 from app.utils.constants import HTTP_STATUS, BudgetPeriod
+from app.utils.decorators import safe_cache_cached
 
 # Create namespace
 budgets_ns = Namespace("budgets", description="Budget operations")
 
-logger = logging.getLogger(__name__)
-
-# ============================================================================
-# Helper Decorator for Safe Caching
-# ============================================================================
-
-
-def safe_cache_cached(timeout=60, query_string=False):
-    """
-    Decorator that safely handles cache unavailability.
-    If Redis is not available, it skips caching and executes the function directly.
-    """
-
-    def decorator(f):
-        @wraps(f)
-        def decorated_function(*args, **kwargs):
-            try:
-                if query_string:
-                    return cache.cached(timeout=timeout, query_string=True)(f)(
-                        *args, **kwargs
-                    )
-                else:
-                    return cache.cached(timeout=timeout)(f)(*args, **kwargs)
-            except Exception as e:
-                logger.debug(f"Cache unavailable, skipping cache: {str(e)}")
-                return f(*args, **kwargs)
-
-        return decorated_function
-
-    return decorator
-
+# logger = logging.getLogger(__name__)
 
 # ============================================================================
 # Model Definitions

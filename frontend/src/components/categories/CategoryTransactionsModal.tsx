@@ -4,7 +4,7 @@ import { XMarkIcon } from '@heroicons/react/24/outline';
 
 import { format } from 'date-fns';
 
-import api from '../../services/api';
+import categoryService from '../../services/categories';
 import { Category, Transaction } from '../../types';
 import Button from '../common/Button';
 
@@ -13,35 +13,21 @@ interface CategoryTransactionsModalProps {
   onClose: () => void;
 }
 
-// Define the API response type
-interface CategoryTransactionsResponse {
-  transactions: Transaction[];
-  total_amount: number;
-  total_count: number;
-  category: Category;
-}
-
 const CategoryTransactionsModal: React.FC<CategoryTransactionsModalProps> = ({
   category,
   onClose,
 }) => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState<{ total: number; count: number } | null>(null);
+  const [total, setTotal] = useState(0);
 
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
       try {
-        const response = await api.get<CategoryTransactionsResponse>(
-          `/categories/${category.id}/transactions`
-        );
-
+        const response = await categoryService.getCategoryTransactions(category.id);
         setTransactions(response.transactions || []);
-        setStats({
-          total: response.total_amount || 0,
-          count: response.total_count || 0,
-        });
+        setTotal(response.total || 0);
       } catch (error) {
         console.error('Failed to load category transactions:', error);
       } finally {
@@ -56,6 +42,10 @@ const CategoryTransactionsModal: React.FC<CategoryTransactionsModalProps> = ({
       style: 'currency',
       currency: 'USD',
     }).format(amount);
+  };
+
+  const calculateTotalAmount = () => {
+    return transactions.reduce((sum, tx) => sum + tx.amount, 0);
   };
 
   return (
@@ -83,15 +73,17 @@ const CategoryTransactionsModal: React.FC<CategoryTransactionsModalProps> = ({
         </div>
 
         {/* Stats Summary */}
-        {stats && !loading && (
+        {!loading && (
           <div className="grid grid-cols-2 gap-4 p-6 bg-gray-50">
             <div className="text-center">
               <p className="text-sm text-gray-500">Total Amount</p>
-              <p className="text-2xl font-bold text-gray-900">{formatCurrency(stats.total)}</p>
+              <p className="text-2xl font-bold text-gray-900">
+                {formatCurrency(calculateTotalAmount())}
+              </p>
             </div>
             <div className="text-center">
               <p className="text-sm text-gray-500">Transaction Count</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.count}</p>
+              <p className="text-2xl font-bold text-gray-900">{total}</p>
             </div>
           </div>
         )}

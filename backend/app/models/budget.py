@@ -208,14 +208,15 @@ class Budget(db.Model):
         recent_count = result or 0
         confidence = min((recent_count / 10) * 100, 100) if recent_count > 0 else 50
 
+        # Convert Decimal to float for JSON serialization
         return {
-            "projected_spend": projected,
-            "remaining_budget": float(self.amount) - projected,
+            "projected_spend": float(projected),
+            "remaining_budget": float(self.amount) - float(projected),
             "will_exceed": projected > float(self.amount),
-            "excess_amount": max(projected - float(self.amount), 0),
-            "confidence": confidence,
+            "excess_amount": float(max(projected - float(self.amount), 0)),
+            "confidence": float(confidence),
             "days_remaining": max(days_remaining, 0),
-            "avg_daily_spend": avg_daily,
+            "avg_daily_spend": float(avg_daily),
         }
 
     def to_dict(self, include_stats=True):
@@ -236,12 +237,18 @@ class Budget(db.Model):
             "period": self.period,
             "month": self.month,
             "year": self.year,
-            "alert_threshold": float(self.alert_threshold),
+            "alert_threshold": (
+                float(self.alert_threshold) if self.alert_threshold else None
+            ),
             "is_active": self.is_active,
             "rollover": self.rollover,
             "notes": self.notes,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
-            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            "created_at": (
+                self.created_at.isoformat() if self.created_at else None
+            ),  # ISO format
+            "updated_at": (
+                self.updated_at.isoformat() if self.updated_at else None
+            ),  # ISO format
         }
 
         if include_stats:

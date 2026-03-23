@@ -61,13 +61,13 @@ RATE_LIMITS = {
         "refresh": "20 per minute",
     },
     "api": {
-        "default": "100 per minute",
-        "analytics": "30 per minute",
+        "default": "200 per minute",
+        "analytics": "60 per minute",
         "export": "10 per hour",
         "bulk_operations": "20 per hour",
-        "dashboard": "60 per minute",
+        "dashboard": "120 per minute",
     },
-    "user": {"default": "200 per minute", "admin": "500 per minute"},
+    "user": {"default": "300 per minute", "admin": "500 per minute"},
     "anonymous": {"default": "50 per minute", "strict": "10 per minute"},
     "admin": {"default": "500 per minute", "sensitive": "50 per minute"},
 }

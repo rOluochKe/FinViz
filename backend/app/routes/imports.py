@@ -4,50 +4,31 @@ Import routes with Flask-RESTX.
 
 import csv
 import io
-import logging
-from functools import wraps
-from pathlib import Path
+import os
+import uuid
 
-from flask import request
+from flask import request, send_file
 from flask_jwt_extended import get_jwt_identity, jwt_required
 from flask_restx import Namespace, Resource, fields
 
-from app.extensions import db
-from app.models.transaction import Transaction
 from app.services.file_service import FileService
 from app.services.import_service import ImportService
 from app.utils.constants import HTTP_STATUS
+from app.utils.decorators import safe_cache_cached
 
 # Create namespace
 imports_ns = Namespace("imports", description="Data import operations")
 
-logger = logging.getLogger(__name__)
 
-# ============================================================================
-# Helper Decorators
-# ============================================================================
-
-
-def safe_cache_cached(timeout=60):
-    """
-    Decorator that safely handles cache unavailability.
-    If Redis is not available, it skips caching and executes the function directly.
-    """
-
-    def decorator(f):
-        @wraps(f)
-        def decorated_function(*args, **kwargs):
-            try:
-                from app.extensions import cache
-
-                return cache.cached(timeout=timeout)(f)(*args, **kwargs)
-            except Exception as e:
-                logger.debug(f"Cache unavailable, skipping cache: {str(e)}")
-                return f(*args, **kwargs)
-
-        return decorated_function
-
-    return decorator
+def get_user_uuid():
+    """Get user UUID from JWT identity."""
+    user_id = get_jwt_identity()
+    if isinstance(user_id, str):
+        try:
+            return uuid.UUID(user_id)
+        except ValueError:
+            return None
+    return user_id
 
 
 # ============================================================================
@@ -191,7 +172,7 @@ error_response = imports_ns.model(
 @imports_ns.route("/upload")
 class UploadFile(Resource):
     @imports_ns.doc(
-        description="Upload a file for import (CSV or JSON)",
+        description="Upload a file for import (CSV, JSON, Excel)",
         security="Bearer Auth",
         responses={
             200: "File uploaded successfully",
@@ -204,7 +185,9 @@ class UploadFile(Resource):
     def post(self):
         """Upload file for import"""
         try:
-            user_id = get_jwt_identity()
+            user_uuid = get_user_uuid()
+            if not user_uuid:
+                imports_ns.abort(HTTP_STATUS.BAD_REQUEST, "Invalid user ID")
 
             if "file" not in request.files:
                 imports_ns.abort(HTTP_STATUS.BAD_REQUEST, "No file uploaded")
@@ -213,17 +196,40 @@ class UploadFile(Resource):
             if file.filename == "":
                 imports_ns.abort(HTTP_STATUS.BAD_REQUEST, "Empty filename")
 
-            # Check file type
-            if not FileService.allowed_file(file.filename):
-                imports_ns.abort(HTTP_STATUS.BAD_REQUEST, "File type not allowed")
+            # Check file type - allow more extensions for import
+            allowed_extensions = {".csv", ".json", ".xls", ".xlsx"}
+            file_ext = os.path.splitext(file.filename)[1].lower()
+
+            if file_ext not in allowed_extensions:
+                imports_ns.abort(
+                    HTTP_STATUS.BAD_REQUEST,
+                    f"File type not allowed. Allowed types: {', '.join(allowed_extensions)}",
+                )
+
+            # Check file size
+            file.seek(0, 2)  # Seek to end of file
+            file_size = file.tell()
+            file.seek(0)  # Seek back to beginning
+
+            if file_size > 16 * 1024 * 1024:  # 16MB
+                imports_ns.abort(
+                    HTTP_STATUS.BAD_REQUEST, "File size exceeds 16MB limit"
+                )
 
             # Save temp file
-            file_info = FileService().save_temp(file, file.filename)
+            file_service = FileService()
+            file_info = file_service.save_temp(file, file.filename)
 
-            return {"message": "File uploaded", "file": file_info}
+            return {
+                "message": "File uploaded",
+                "file": {
+                    "filename": file_info["filename"],
+                    "original": file_info["original"],
+                    "size": file_info["size"],
+                },
+            }
 
         except Exception as e:
-            logger.error(f"Upload error: {str(e)}")
             imports_ns.abort(
                 HTTP_STATUS.INTERNAL_SERVER_ERROR, f"Upload failed: {str(e)}"
             )
@@ -247,7 +253,10 @@ class PreviewImport(Resource):
     def post(self):
         """Preview import"""
         try:
-            user_id = get_jwt_identity()
+            user_uuid = get_user_uuid()
+            if not user_uuid:
+                imports_ns.abort(HTTP_STATUS.BAD_REQUEST, "Invalid user ID")
+
             data = request.json or {}
 
             filename = data.get("filename")
@@ -258,9 +267,9 @@ class PreviewImport(Resource):
 
             # Get file
             file_service = FileService()
-            file_path = file_service.temp / filename
+            file_path = file_service.get_temp_path(filename)
 
-            if not file_path.exists():
+            if not file_path:
                 imports_ns.abort(HTTP_STATUS.NOT_FOUND, "File not found")
 
             # Read file
@@ -293,12 +302,13 @@ class PreviewImport(Resource):
                 )
 
             # Validate
-            results = ImportService.import_transactions(records, user_id, dry_run=True)
+            results = ImportService.import_transactions(
+                records, user_uuid, dry_run=True
+            )
 
             return results
 
         except Exception as e:
-            logger.error(f"Preview error: {str(e)}")
             imports_ns.abort(
                 HTTP_STATUS.INTERNAL_SERVER_ERROR, f"Preview failed: {str(e)}"
             )
@@ -322,7 +332,10 @@ class ExecuteImport(Resource):
     def post(self):
         """Execute import"""
         try:
-            user_id = get_jwt_identity()
+            user_uuid = get_user_uuid()
+            if not user_uuid:
+                imports_ns.abort(HTTP_STATUS.BAD_REQUEST, "Invalid user ID")
+
             data = request.json or {}
 
             filename = data.get("filename")
@@ -333,9 +346,9 @@ class ExecuteImport(Resource):
 
             # Get file
             file_service = FileService()
-            file_path = file_service.temp / filename
+            file_path = file_service.get_temp_path(filename)
 
-            if not file_path.exists():
+            if not file_path:
                 imports_ns.abort(HTTP_STATUS.NOT_FOUND, "File not found")
 
             # Read file
@@ -368,13 +381,12 @@ class ExecuteImport(Resource):
                 )
 
             # Import
-            results = ImportService.import_transactions(records, user_id, dry_run=False)
+            results = ImportService.import_transactions(
+                records, user_uuid, dry_run=False
+            )
 
             # Clean up temp file
-            try:
-                file_path.unlink()
-            except:
-                pass  # Ignore cleanup errors
+            file_service.delete_temp(filename)
 
             return {
                 "message": f"Imported {results['success']} transactions",
@@ -382,7 +394,6 @@ class ExecuteImport(Resource):
             }
 
         except Exception as e:
-            logger.error(f"Execute import error: {str(e)}")
             imports_ns.abort(
                 HTTP_STATUS.INTERNAL_SERVER_ERROR, f"Import failed: {str(e)}"
             )
@@ -425,7 +436,6 @@ class GetTemplate(Resource):
                 return {"template": template, "format": "json"}
 
         except Exception as e:
-            logger.error(f"Template generation error: {str(e)}")
             imports_ns.abort(
                 HTTP_STATUS.INTERNAL_SERVER_ERROR,
                 f"Template generation failed: {str(e)}",
@@ -513,7 +523,6 @@ class ValidateFile(Resource):
             }
 
         except Exception as e:
-            logger.error(f"Validation error: {str(e)}")
             imports_ns.abort(
                 HTTP_STATUS.INTERNAL_SERVER_ERROR, f"Validation failed: {str(e)}"
             )
@@ -536,7 +545,6 @@ class ClearTemp(Resource):
             return {"message": f"Cleared {deleted} temporary files", "count": deleted}
 
         except Exception as e:
-            logger.error(f"Clear temp error: {str(e)}")
             imports_ns.abort(
                 HTTP_STATUS.INTERNAL_SERVER_ERROR,
                 f"Failed to clear temp files: {str(e)}",

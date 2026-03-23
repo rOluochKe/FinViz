@@ -91,13 +91,14 @@ const UserForm: React.FC<UserFormProps> = ({
         />
       </div>
 
-      {/* Email */}
+      {/* Email - Make read-only as admin shouldn't change email */}
       <Input
         label="Email"
         type="email"
         placeholder="Enter email"
         error={errors.email?.message}
         required
+        disabled
         {...register('email')}
       />
 

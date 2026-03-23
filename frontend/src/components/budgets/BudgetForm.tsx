@@ -18,18 +18,19 @@ interface BudgetFormProps {
 }
 
 interface BudgetFormData {
-  category_id: number;
+  category_id: string;
   amount: number;
   period: 'monthly' | 'quarterly' | 'yearly';
   month?: number | null;
   year: number;
   alert_threshold?: number;
   is_active?: boolean;
+  rollover?: boolean;
   notes?: string | null;
 }
 
 const schema = yup.object().shape({
-  category_id: yup.number().required('Category is required'),
+  category_id: yup.string().required('Category is required'),
   amount: yup
     .number()
     .required('Budget amount is required')
@@ -53,6 +54,7 @@ const schema = yup.object().shape({
     .min(0, 'Alert threshold must be between 0-100')
     .max(100, 'Alert threshold must be between 0-100'),
   is_active: yup.boolean().optional(),
+  rollover: yup.boolean().optional(),
   notes: yup.string().nullable().optional().max(500, 'Notes must be at most 500 characters'),
 });
 
@@ -69,9 +71,9 @@ const BudgetForm: React.FC<BudgetFormProps> = ({ initialData, onSubmit, onCancel
         period: initialData.period,
         month: initialData.month,
         year: initialData.year,
-        // Since Budget type doesn't have alert_threshold, use default
-        alert_threshold: 80,
+        alert_threshold: initialData.alert_threshold ?? 80,
         is_active: initialData.is_active ?? true,
+        rollover: initialData.rollover ?? false,
         notes: initialData.notes || '',
       };
     }
@@ -81,6 +83,7 @@ const BudgetForm: React.FC<BudgetFormProps> = ({ initialData, onSubmit, onCancel
       month: new Date().getMonth() + 1,
       alert_threshold: 80,
       is_active: true,
+      rollover: false,
     };
   };
 
@@ -100,8 +103,9 @@ const BudgetForm: React.FC<BudgetFormProps> = ({ initialData, onSubmit, onCancel
   useEffect(() => {
     const loadCategories = async () => {
       try {
-        const response = await api.get<{ categories: Category[] }>('/categories?type=expense');
-        setCategories(response.categories || []);
+        // API returns array directly
+        const response = await api.get<Category[]>('/categories?type=expense');
+        setCategories(response || []);
       } catch (error) {
         console.error('Failed to load categories:', error);
       }
@@ -246,6 +250,19 @@ const BudgetForm: React.FC<BudgetFormProps> = ({ initialData, onSubmit, onCancel
         />
         <label htmlFor="is_active" className="ml-2 text-sm text-gray-700">
           Active Budget
+        </label>
+      </div>
+
+      {/* Rollover */}
+      <div className="flex items-center">
+        <input
+          type="checkbox"
+          id="rollover"
+          {...register('rollover')}
+          className="h-4 w-4 text-primary-600 focus:ring-primary-500 rounded"
+        />
+        <label htmlFor="rollover" className="ml-2 text-sm text-gray-700">
+          Rollover unused amount to next period
         </label>
       </div>
 

@@ -74,7 +74,7 @@ class ImportService:
         try:
             if isinstance(record["date"], str):
                 datetime.strptime(record["date"], "%Y-%m-%d")
-        except BaseException:
+        except (ValueError, TypeError):
             return False, "Invalid date format (use YYYY-MM-DD)"
 
         # Validate amount
@@ -82,16 +82,8 @@ class ImportService:
             amount = float(record["amount"])
             if amount <= 0:
                 return False, "Amount must be positive"
-        except BaseException:
+        except (ValueError, TypeError):
             return False, "Invalid amount"
-
-        # Validate category if provided
-        if "category" in record:
-            cat = Category.query.filter_by(
-                name=record["category"], user_id=user_id
-            ).first()
-            if not cat:
-                return False, f"Category not found: {record['category']}"
 
         return True, "OK"
 
@@ -120,9 +112,9 @@ class ImportService:
                 failed.append({"index": idx, "record": rec, "error": error})
                 continue
 
-            # Find category
+            # Find category by name
             category_id = None
-            if "category" in rec:
+            if "category" in rec and rec["category"]:
                 cat = Category.query.filter_by(
                     name=rec["category"], user_id=user_id
                 ).first()
@@ -132,15 +124,22 @@ class ImportService:
             # Determine type (default to expense)
             tx_type = rec.get("type", "expense")
 
+            # Parse date
+            try:
+                tx_date = datetime.strptime(rec["date"], "%Y-%m-%d").date()
+            except (ValueError, TypeError):
+                tx_date = datetime.now().date()
+
             # Create transaction
             tx_data = {
                 "user_id": user_id,
                 "category_id": category_id,
                 "amount": float(rec["amount"]),
                 "description": rec["description"],
-                "date": datetime.strptime(rec["date"], "%Y-%m-%d").date(),
+                "date": tx_date,
                 "type": tx_type,
                 "notes": rec.get("notes", ""),
+                "tags": rec.get("tags", []),
             }
 
             if not dry_run:

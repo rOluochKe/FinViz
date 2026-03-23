@@ -2,54 +2,23 @@
 Category routes with Flask-RESTX.
 """
 
-import logging
 import uuid
 from datetime import datetime, timedelta
-from functools import wraps
 
 from flask import request
 from flask_jwt_extended import get_jwt_identity, jwt_required
 from flask_restx import Namespace, Resource, fields
 
-from app.extensions import cache, db
+from app.extensions import db
 from app.models.category import Category
 from app.models.transaction import Transaction
 from app.schemas.category_schema import CategorySchema
 from app.schemas.transaction_schema import TransactionSchema
 from app.utils.constants import DEFAULT_CATEGORIES, HTTP_STATUS, CategoryType
+from app.utils.decorators import safe_cache_cached
 
 # Create namespace
 categories_ns = Namespace("categories", description="Category operations")
-
-logger = logging.getLogger(__name__)
-
-# ============================================================================
-# Helper Decorator for Safe Caching
-# ============================================================================
-
-
-def safe_cache_cached(timeout=300, query_string=False):
-    """
-    Decorator that safely handles cache unavailability.
-    """
-
-    def decorator(f):
-        @wraps(f)
-        def decorated_function(*args, **kwargs):
-            try:
-                if query_string:
-                    return cache.cached(timeout=timeout, query_string=True)(f)(
-                        *args, **kwargs
-                    )
-                else:
-                    return cache.cached(timeout=timeout)(f)(*args, **kwargs)
-            except Exception as e:
-                logger.debug(f"Cache unavailable, skipping cache: {str(e)}")
-                return f(*args, **kwargs)
-
-        return decorated_function
-
-    return decorator
 
 
 # ============================================================================
@@ -210,7 +179,6 @@ class CategoryDefaults(Resource):
             else:
                 user_uuid = user_id
         except (ValueError, TypeError) as e:
-            logger.error(f"Invalid user ID format: {user_id}")
             categories_ns.abort(
                 HTTP_STATUS.BAD_REQUEST, f"Invalid user ID format: {user_id}"
             )
@@ -244,7 +212,6 @@ class CategoryDefaults(Resource):
                 created.append(cat_data["name"])
 
             except Exception as e:
-                logger.error(f"Error creating category {cat_data['name']}: {str(e)}")
                 # Rollback this specific category if there was an error
                 db.session.rollback()
                 # Continue with other categories
@@ -260,7 +227,6 @@ class CategoryDefaults(Resource):
                 }, HTTP_STATUS.CREATED
             except Exception as e:
                 db.session.rollback()
-                logger.error(f"Error committing categories: {str(e)}")
                 categories_ns.abort(
                     HTTP_STATUS.INTERNAL_SERVER_ERROR,
                     f"Failed to create categories: {str(e)}",
@@ -324,13 +290,22 @@ class CategoryStats(Resource):
         """Get category statistics"""
         user_id = get_jwt_identity()
 
-        categories = Category.get_user_categories(user_id)
+        # Convert user_id to UUID if it's a string
+        if isinstance(user_id, str):
+            try:
+                user_uuid = uuid.UUID(user_id)
+            except ValueError:
+                categories_ns.abort(HTTP_STATUS.BAD_REQUEST, "Invalid user ID format")
+        else:
+            user_uuid = user_id
+
+        categories = Category.get_user_categories(user_uuid)
         year_ago = datetime.now().date() - timedelta(days=365)
 
         stats = []
         for cat in categories:
             transactions = Transaction.query.filter(
-                Transaction.user_id == user_id,
+                Transaction.user_id == user_uuid,
                 Transaction.category_id == cat.id,
                 Transaction.date >= year_ago,
             ).all()
@@ -338,7 +313,7 @@ class CategoryStats(Resource):
             total = sum(t.amount for t in transactions)
             count = len(transactions)
             months = set((t.date.year, t.date.month) for t in transactions)
-            monthly_avg = total / len(months) if months else 0
+            monthly_avg = total / len(months) if months else 0.0
 
             stats.append(
                 {
@@ -347,8 +322,8 @@ class CategoryStats(Resource):
                     "category_type": cat.type,
                     "color": cat.color,
                     "transaction_count_12m": count,
-                    "total_amount_12m": float(total),
-                    "monthly_average": float(monthly_avg),
+                    "total_amount_12m": float(total) if total else 0.0,
+                    "monthly_average": float(monthly_avg) if monthly_avg else 0.0,
                     "is_system": cat.is_system,
                 }
             )

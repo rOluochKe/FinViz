@@ -32,50 +32,11 @@ const ExportSection: React.FC<ExportSectionProps> = ({ onExportComplete, onError
   const [includeCharts, setIncludeCharts] = useState(false);
   const [categoryId, setCategoryId] = useState<string>('');
 
-  const loadFormats = useCallback(async () => {
-    setLoading(true);
-    try {
-      const data = await exportImportService.getExportFormats();
-
-      // Ensure data is an array
-      if (Array.isArray(data)) {
-        setFormats(data);
-      } else if (data && typeof data === 'object') {
-        // Handle case where API returns an object with a formats property
-        if (
-          typeof data === 'object' &&
-          data !== null &&
-          'formats' in data &&
-          Array.isArray((data as { formats: unknown }).formats)
-        ) {
-          setFormats((data as { formats: ExportFormatInfo[] }).formats);
-        } else {
-          // If it's a single object, wrap it in an array
-          setFormats([data as ExportFormatInfo]);
-        }
-      } else {
-        // Fallback to default formats if API returns invalid data
-        setFormats(getDefaultFormats());
-      }
-    } catch (error: any) {
-      // Set default formats on error
-      setFormats(getDefaultFormats());
-      onError?.(error.message || 'Failed to load export formats');
-    } finally {
-      setLoading(false);
-    }
-  }, [onError]);
-
-  // Load available formats on mount
-  useEffect(() => {
-    loadFormats();
-  }, [loadFormats]);
-
   // Default formats as fallback
   const getDefaultFormats = (): ExportFormatInfo[] => {
     return [
       {
-        format: 'csv',
+        format: 'csv' as ExportFormat,
         name: 'CSV (Comma Separated Values)',
         mime_type: 'text/csv',
         extension: '.csv',
@@ -83,7 +44,7 @@ const ExportSection: React.FC<ExportSectionProps> = ({ onExportComplete, onError
         max_size_mb: 100,
       },
       {
-        format: 'json',
+        format: 'json' as ExportFormat,
         name: 'JSON',
         mime_type: 'application/json',
         extension: '.json',
@@ -91,7 +52,7 @@ const ExportSection: React.FC<ExportSectionProps> = ({ onExportComplete, onError
         max_size_mb: 100,
       },
       {
-        format: 'excel',
+        format: 'excel' as ExportFormat,
         name: 'Excel',
         mime_type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         extension: '.xlsx',
@@ -99,7 +60,7 @@ const ExportSection: React.FC<ExportSectionProps> = ({ onExportComplete, onError
         max_size_mb: 50,
       },
       {
-        format: 'pdf',
+        format: 'pdf' as ExportFormat,
         name: 'PDF',
         mime_type: 'application/pdf',
         extension: '.pdf',
@@ -109,6 +70,39 @@ const ExportSection: React.FC<ExportSectionProps> = ({ onExportComplete, onError
     ];
   };
 
+  const loadFormats = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await exportImportService.getExportFormats();
+
+      let formatsArray: ExportFormatInfo[] = [];
+
+      if (Array.isArray(data) && data.length > 0) {
+        formatsArray = data;
+      } else if (data && typeof data === 'object' && !Array.isArray(data)) {
+        if ('formats' in data && Array.isArray((data as any).formats)) {
+          formatsArray = (data as any).formats;
+        }
+      }
+
+      if (formatsArray.length > 0 && formatsArray.every((f) => f.format && f.name)) {
+        setFormats(formatsArray);
+      } else {
+        setFormats(getDefaultFormats());
+      }
+    } catch (error: any) {
+      console.error('Failed to load export formats:', error);
+      setFormats(getDefaultFormats());
+      onError?.(error.message || 'Failed to load export formats');
+    } finally {
+      setLoading(false);
+    }
+  }, [onError]);
+
+  useEffect(() => {
+    loadFormats();
+  }, [loadFormats]);
+
   const handleExport = async () => {
     setExporting(true);
     try {
@@ -117,7 +111,7 @@ const ExportSection: React.FC<ExportSectionProps> = ({ onExportComplete, onError
       const options = {
         format: exportFormat,
         ...(dateRange === 'custom' && { start_date: startDate, end_date: endDate }),
-        ...(categoryId && { category_id: parseInt(categoryId) }),
+        ...(categoryId && { category_id: categoryId }),
       };
 
       switch (exportType) {
@@ -141,26 +135,27 @@ const ExportSection: React.FC<ExportSectionProps> = ({ onExportComplete, onError
           break;
       }
 
-      // Download the file
       if (result) {
-        // Check if result has filename or if we need to get it from response
+        // API returns { filename: string, download_url: string }
         const filename = result.filename || `export.${exportFormat}`;
         const downloadUrl = result.download_url || '';
 
+        // Download the file using the download_url or fetch it directly
         if (downloadUrl) {
-          // If we have a download URL, fetch the blob
+          // Use the download_url to get the file
           const blob = await exportImportService.downloadFile(filename);
           exportImportService.triggerDownload(filename, blob);
         } else {
-          // If no download URL, create a simple blob with the data
-          const blob = new Blob([JSON.stringify(result)], { type: 'application/json' });
+          // Create a blob from the result data
+          const blob = new Blob([JSON.stringify(result, null, 2)], { type: 'application/json' });
           exportImportService.triggerDownload(filename, blob);
         }
 
         toast.success(`Export completed: ${filename}`);
+
         onExportComplete?.({
           filename: filename,
-          size: 0, // We don't have size info in this case
+          size: 0,
           size_formatted: 'Unknown',
           created_at: new Date().toISOString(),
           download_url: downloadUrl,
@@ -175,13 +170,15 @@ const ExportSection: React.FC<ExportSectionProps> = ({ onExportComplete, onError
     }
   };
 
-  // Safely create format options
-  const formatOptions = Array.isArray(formats)
-    ? formats.map((f) => ({
-        value: f.format,
-        label: f.name,
-      }))
-    : [];
+  const currentFormats =
+    formats && formats.length > 0 && formats.every((f) => f.format && f.name)
+      ? formats
+      : getDefaultFormats();
+
+  const formatOptions = currentFormats.map((f) => ({
+    value: f.format,
+    label: f.name,
+  }));
 
   const exportTypeOptions = [
     { value: 'transactions', label: 'Transactions' },
@@ -202,10 +199,7 @@ const ExportSection: React.FC<ExportSectionProps> = ({ onExportComplete, onError
     { value: 'custom', label: 'Custom Range' },
   ];
 
-  // Safely get current format info
-  const currentFormat = Array.isArray(formats)
-    ? formats.find((f) => f.format === exportFormat)
-    : null;
+  const currentFormat = currentFormats.find((f) => f.format === exportFormat);
 
   return (
     <div className="space-y-6">
@@ -226,17 +220,13 @@ const ExportSection: React.FC<ExportSectionProps> = ({ onExportComplete, onError
               options={exportTypeOptions}
             />
 
-            {/* Format Selection - Only show if we have formats */}
-            {formatOptions.length > 0 ? (
-              <Select
-                label="Format"
-                value={exportFormat}
-                onChange={(e) => setExportFormat(e.target.value as ExportFormat)}
-                options={formatOptions}
-              />
-            ) : (
-              <div className="text-sm text-gray-500">No export formats available</div>
-            )}
+            {/* Format Selection */}
+            <Select
+              label="Format"
+              value={exportFormat}
+              onChange={(e) => setExportFormat(e.target.value as ExportFormat)}
+              options={formatOptions}
+            />
 
             {/* Format Description */}
             {currentFormat && (
@@ -284,10 +274,10 @@ const ExportSection: React.FC<ExportSectionProps> = ({ onExportComplete, onError
             {exportType === 'transactions' && (
               <Input
                 label="Category ID (optional)"
-                type="number"
+                type="text"
                 value={categoryId}
                 onChange={(e) => setCategoryId(e.target.value)}
-                placeholder="Filter by category"
+                placeholder="Enter category UUID"
               />
             )}
 

@@ -25,34 +25,34 @@ const SummaryCards: React.FC<SummaryCardsProps> = ({ data, period }) => {
       currency: 'USD',
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
-    }).format(value);
+    }).format(value || 0);
   };
 
   const cards = [
     {
       title: 'Total Income',
-      value: formatCurrency(data.total_income),
+      value: formatCurrency(data.total_income || 0),
       icon: ArrowTrendingUpIcon,
       iconBg: 'bg-green-100',
       iconColor: 'text-green-600',
     },
     {
       title: 'Total Expenses',
-      value: formatCurrency(data.total_expense),
+      value: formatCurrency(data.total_expense || 0),
       icon: ArrowTrendingDownIcon,
       iconBg: 'bg-red-100',
       iconColor: 'text-red-600',
     },
     {
       title: 'Net Savings',
-      value: formatCurrency(data.net_savings),
+      value: formatCurrency(data.net_savings || 0),
       icon: BanknotesIcon,
-      iconBg: data.net_savings >= 0 ? 'bg-blue-100' : 'bg-red-100',
-      iconColor: data.net_savings >= 0 ? 'text-blue-600' : 'text-red-600',
+      iconBg: (data.net_savings || 0) >= 0 ? 'bg-blue-100' : 'bg-red-100',
+      iconColor: (data.net_savings || 0) >= 0 ? 'text-blue-600' : 'text-red-600',
     },
     {
       title: 'Savings Rate',
-      value: `${data.savings_rate.toFixed(1)}%`,
+      value: `${(data.savings_rate || 0).toFixed(1)}%`,
       icon: CurrencyDollarIcon,
       iconBg: 'bg-purple-100',
       iconColor: 'text-purple-600',

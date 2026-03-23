@@ -21,38 +21,42 @@ class CategoryService {
     if (type) params.append('type', type);
     params.append('include_system', includeSystem.toString());
 
-    const response = await api.get<{ categories: Category[] }>(`/categories?${params.toString()}`);
-    return response.categories || [];
+    const response = await api.get<Category[]>(`/categories?${params.toString()}`);
+    // Handle both response formats
+    if (Array.isArray(response)) {
+      return response;
+    }
+    return response || [];
   }
 
   /**
    * Get a single category by ID
    */
-  async getCategory(id: number): Promise<Category> {
-    const response = await api.get<{ category: Category }>(`/categories/${id}`);
-    return response.category;
+  async getCategory(id: string): Promise<Category> {
+    const response = await api.get<Category>(`/categories/${id}`);
+    return response;
   }
 
   /**
    * Create a new category
    */
   async createCategory(data: CategoryCreate): Promise<Category> {
-    const response = await api.post<{ category: Category }>('/categories', data);
-    return response.category;
+    const response = await api.post<Category>('/categories', data);
+    return response;
   }
 
   /**
    * Update an existing category
    */
-  async updateCategory(id: number, data: Partial<CategoryCreate>): Promise<Category> {
-    const response = await api.put<{ category: Category }>(`/categories/${id}`, data);
-    return response.category;
+  async updateCategory(id: string, data: Partial<CategoryCreate>): Promise<Category> {
+    const response = await api.put<Category>(`/categories/${id}`, data);
+    return response;
   }
 
   /**
    * Delete a category
    */
-  async deleteCategory(id: number): Promise<void> {
+  async deleteCategory(id: string): Promise<void> {
     await api.delete(`/categories/${id}`);
   }
 
@@ -75,8 +79,21 @@ class CategoryService {
   /**
    * Get transactions for a specific category
    */
-  async getCategoryTransactions(categoryId: number): Promise<any> {
-    const response = await api.get(`/categories/${categoryId}/transactions`);
+  async getCategoryTransactions(categoryId: string): Promise<{
+    category: Category;
+    transactions: any[];
+    total: number;
+  }> {
+    // Define the expected response type
+    interface CategoryTransactionsResponse {
+      category: Category;
+      transactions: any[];
+      total: number;
+    }
+
+    const response = await api.get<CategoryTransactionsResponse>(
+      `/categories/${categoryId}/transactions`
+    );
     return response;
   }
 

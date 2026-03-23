@@ -1,4 +1,4 @@
-# FinViz Backend
+# FinViz Pro - Backend
 
 Finance Analytics Dashboard Backend API built with Flask, PostgreSQL, and Redis.
 
@@ -60,9 +60,8 @@ Finance Analytics Dashboard Backend API built with Flask, PostgreSQL, and Redis.
 
 ### Using Docker (Recommended)
 
-```
-# Clone the repository
-git clone git@github.com:rOluochKe/FinViz.git
+```bash
+# Change directory
 cd FinViz/backend
 
 # Copy environment file
@@ -86,7 +85,7 @@ make seed
 
 ### Without Docker (Local Setup)
 
-```
+```bash
 # Clone the repository
 git clone git@github.com:rOluochKe/FinViz.git
 cd finviz-pro-backend
@@ -123,7 +122,7 @@ make run
 
 ### Development Server
 
-```
+```bash
 # Start Flask development server
 make run
 
@@ -137,14 +136,14 @@ make run-dev
 
 ### Production Server
 
-```
+```bash
 # Start with Gunicorn
 make run-prod
 ```
 
 ### Docker
 
-```
+```bash
 # Start all services
 make docker-up
 
@@ -168,7 +167,7 @@ make docker-clean
 
 ### Migrations
 
-```
+```bash
 # Initialize migrations (first time only)
 make db-init
 
@@ -187,7 +186,7 @@ make db-reset
 
 ### Seeding & Backup
 
-```
+```bash
 # Seed database with test data
 make seed
 
@@ -205,7 +204,7 @@ make shell
 
 ### Running Tests
 
-```
+```bash
 # Run all tests
 make test
 
@@ -226,7 +225,7 @@ make test-match PATTERN=transaction
 
 ### Interactive Documentation
 
-```
+```bash
 Swagger UI: http://localhost:5000/api/docs
 ```
 
@@ -236,14 +235,14 @@ The project includes a comprehensive Makefile for all common tasks:
 
 ### Installation & Dependencies
 
-```
+```bash
 make install        # Install production dependencies
 make install-dev    # Install all dependencies (including dev)
 ```
 
 ### Running the Application
 
-```
+```bash
 make run            # Start Flask development server
 make run-dev        # Start with debug mode (auto-reload)
 make run-prod       # Start production server with Gunicorn
@@ -251,7 +250,7 @@ make run-prod       # Start production server with Gunicorn
 
 ### Code Quality
 
-```
+```bash
 make lint           # Run linters (flake8, mypy)
 make lint-fix       # Auto-fix linting issues
 make format         # Format code (black, isort)
@@ -259,7 +258,7 @@ make format         # Format code (black, isort)
 
 ### Testing
 
-```
+```bash
 make test           # Run all tests
 make test-cov       # Run tests with coverage
 make test-watch     # Run tests in watch mode
@@ -269,7 +268,7 @@ make test-match     # Run tests matching pattern
 
 ### Docker
 
-```
+```bash
 make docker-up      # Start Docker services
 make docker-down    # Stop Docker services
 make docker-logs    # View Docker logs
@@ -280,7 +279,7 @@ make docker-clean   # Clean Docker resources
 
 ### Database
 
-```
+```bash
 make db-init        # Initialize migrations
 make db-migrate     # Create migration
 make db-upgrade     # Apply migrations
@@ -294,7 +293,7 @@ make restore        # Restore backup
 
 ### Git Hooks
 
-```
+```bash
 make hooks-install    # Install pre-commit hooks
 make hooks-run        # Run hooks on all files
 make hooks-update     # Update hooks
@@ -303,7 +302,7 @@ make hooks-uninstall  # Uninstall hooks
 
 ### Utilities
 
-```
+```bash
 make clean         # Clean cache files
 make help          # Show all commands
 ```

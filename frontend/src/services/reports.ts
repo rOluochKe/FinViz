@@ -41,15 +41,16 @@ class ReportsService {
   /**
    * Get yearly report
    */
+
   async getYearlyReport(year: number): Promise<YearlyReport> {
     const response = await api.get<YearlyReport>(`/reports/yearly/${year}`);
     return response;
   }
 
   /**
-   * Get category-specific report
+   * Get category-specific report - Use string ID for UUID
    */
-  async getCategoryReport(categoryId: number, months: number = 12): Promise<CategoryReport> {
+  async getCategoryReport(categoryId: string, months: number = 12): Promise<CategoryReport> {
     const response = await api.get<CategoryReport>(
       `/reports/category/${categoryId}?months=${months}`
     );
@@ -80,8 +81,25 @@ class ReportsService {
     best_month?: any;
     worst_month?: any;
   }> {
-    const response = await api.get<any>(`/reports/summary/${year}`);
-    return response;
+    try {
+      const response = await api.get<any>(`/reports/summary/${year}`);
+      return response;
+    } catch (error: any) {
+      if (error.status_code === 404) {
+        return {
+          summary: {
+            income: 0,
+            expense: 0,
+            savings: 0,
+            rate: 0,
+            count: 0,
+          },
+          best_month: null,
+          worst_month: null,
+        };
+      }
+      throw error;
+    }
   }
 
   /**
@@ -98,10 +116,18 @@ class ReportsService {
    * Export yearly report as PDF
    */
   async exportYearlyReport(year: number): Promise<Blob> {
-    const response = await api.get(`/reports/export/yearly/${year}`, {
-      responseType: 'blob',
-    });
-    return response as unknown as Blob;
+    try {
+      const response = await api.get(`/reports/export/yearly/${year}`, {
+        responseType: 'blob',
+      });
+      return response as unknown as Blob;
+    } catch (error: any) {
+      // If no data, return empty blob
+      if (error.status_code === 404) {
+        throw new Error(`No data available for year ${year}`);
+      }
+      throw error;
+    }
   }
 
   /**

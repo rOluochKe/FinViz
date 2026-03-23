@@ -2,69 +2,29 @@
 Transaction routes with Flask-RESTX.
 """
 
-import logging
 import uuid
 from collections import defaultdict
 from datetime import datetime, timedelta
-from functools import wraps
 
 from flask import request, send_file
 from flask_jwt_extended import get_jwt_identity, jwt_required
 from flask_restx import Namespace, Resource, fields
 
-from app.extensions import cache, db
+from app.extensions import db
 from app.models.category import Category
 from app.models.transaction import Transaction
 from app.schemas.transaction_schema import TransactionSchema
 from app.services.export_service import ExportService
 from app.services.file_service import FileService
 from app.utils.constants import HTTP_STATUS, TransactionType
+from app.utils.decorators import (
+    safe_cache_cached,
+    safe_delete_memoized,
+    safe_rate_limit,
+)
 
 # Create namespace
 transactions_ns = Namespace("transactions", description="Transaction operations")
-
-logger = logging.getLogger(__name__)
-
-
-# ============================================================================
-# Helper Decorator for Safe Caching
-# ============================================================================
-
-
-def safe_cache_cached(timeout=60, query_string=False):
-    """
-    Decorator that safely handles cache unavailability.
-    If Redis is not available, it skips caching and executes the function directly.
-    """
-
-    def decorator(f):
-        @wraps(f)
-        def decorated_function(*args, **kwargs):
-            try:
-                if query_string:
-                    return cache.cached(timeout=timeout, query_string=True)(f)(
-                        *args, **kwargs
-                    )
-                else:
-                    return cache.cached(timeout=timeout)(f)(*args, **kwargs)
-            except Exception as e:
-                logger.debug(f"Cache unavailable, skipping cache: {str(e)}")
-                return f(*args, **kwargs)
-
-        return decorated_function
-
-    return decorator
-
-
-def safe_delete_memoized(func):
-    """
-    Safely delete memoized cache entries.
-    If Redis is not available, it silently continues.
-    """
-    try:
-        cache.delete_memoized(func)
-    except Exception as e:
-        logger.debug(f"Cache unavailable, cannot delete memoized: {str(e)}")
 
 
 # ============================================================================
@@ -318,14 +278,30 @@ class TransactionList(Resource):
     @transactions_ns.param("search", "Search in description")
     @transactions_ns.marshal_with(transaction_list_response)
     @jwt_required()
-    @safe_cache_cached(timeout=60, query_string=True)  # Safe cache
+    @safe_cache_cached(timeout=60, query_string=True)
+    @safe_rate_limit("200 per minute")
     def get(self):
         """Get paginated list of transactions"""
         user_id = get_jwt_identity()
+
+        # Convert user_id to UUID if it's a string
+        if isinstance(user_id, str):
+            try:
+                user_uuid = uuid.UUID(user_id)
+            except ValueError:
+                transactions_ns.abort(HTTP_STATUS.BAD_REQUEST, "Invalid user ID format")
+        else:
+            user_uuid = user_id
+
         page = request.args.get("page", 1, type=int)
         per_page = min(request.args.get("per_page", 20, type=int), 100)
 
-        query = Transaction.query.filter_by(user_id=user_id)
+        # Build query with eager loading of category relationship
+        query = Transaction.query.filter_by(user_id=user_uuid)
+
+        # Eager load the category relationship to avoid N+1 queries
+        # and ensure category data is available
+        query = query.options(db.joinedload(Transaction.category))
 
         # Handle date filters
         if request.args.get("start_date"):
@@ -354,6 +330,7 @@ class TransactionList(Resource):
         query = query.order_by(Transaction.date.desc())
         paginated = query.paginate(page=page, per_page=per_page)
 
+        # Serialize with the loaded relationships
         return {
             "transactions": TransactionSchema(many=True).dump(paginated.items),
             "total": paginated.total,
@@ -385,6 +362,19 @@ class TransactionList(Resource):
             )
 
         user_id = get_jwt_identity()
+
+        # Convert user_id to UUID if it's a string
+        if isinstance(user_id, str):
+            try:
+                user_uuid = uuid.UUID(user_id)
+            except ValueError:
+                transactions_ns.abort(
+                    HTTP_STATUS.BAD_REQUEST,
+                    "Invalid user ID format",
+                )
+        else:
+            user_uuid = user_id
+
         data = request.json
 
         # Validate category_id format
@@ -402,10 +392,25 @@ class TransactionList(Resource):
             transactions_ns.abort(HTTP_STATUS.BAD_REQUEST, "Category not found")
 
         # Create transaction
-        transaction = Transaction(user_id=user_id, **data)
+        transaction = Transaction(
+            user_id=user_uuid,
+            category_id=category_uuid,
+            amount=data["amount"],
+            description=data["description"],
+            date=data["date"],
+            type=data["type"],
+            notes=data.get("notes"),
+            tags=data.get("tags", []),
+            is_recurring=data.get("is_recurring", False),
+            recurring_frequency=data.get("recurring_frequency"),
+            recurring_end_date=data.get("recurring_end_date"),
+        )
 
         db.session.add(transaction)
         db.session.commit()
+
+        # Refresh to load relationships
+        db.session.refresh(transaction)
 
         # Clear cache safely
         safe_delete_memoized(TransactionList.get)

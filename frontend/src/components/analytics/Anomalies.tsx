@@ -13,7 +13,7 @@ interface AnomaliesProps {
     threshold: number;
     items: Anomaly[];
   };
-  onViewTransaction?: (id: number) => void;
+  onViewTransaction?: (id: string) => void; // Change from number to string
 }
 
 const Anomalies: React.FC<AnomaliesProps> = ({ data, onViewTransaction }) => {
@@ -59,6 +59,11 @@ const Anomalies: React.FC<AnomaliesProps> = ({ data, onViewTransaction }) => {
       return true;
     });
   }, [safeData.items, selectedType, searchTerm]);
+
+  // Get the transaction ID from the item (could be id or transaction_id)
+  const getTransactionId = (item: Anomaly): string | undefined => {
+    return item.id || item.transaction_id;
+  };
 
   return (
     <div className="space-y-6">
@@ -119,57 +124,62 @@ const Anomalies: React.FC<AnomaliesProps> = ({ data, onViewTransaction }) => {
 
         {filteredItems.length > 0 ? (
           <div className="divide-y divide-gray-200">
-            {filteredItems.map((item, index) => (
-              <div key={index} className="p-6 hover:bg-gray-50 transition-colors">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center mb-2">
-                      <ExclamationTriangleIcon
-                        className={`h-5 w-5 mr-2 ${
-                          item.type === 'global' ? 'text-red-500' : 'text-yellow-500'
-                        }`}
-                      />
-                      <span
-                        className={`px-2 py-1 rounded-full text-xs font-medium ${getAnomalyColor(item.z_score)}`}
-                      >
-                        {item.type || 'anomaly'} · Z-score: {item.z_score.toFixed(2)}
-                      </span>
-                    </div>
+            {filteredItems.map((item, index) => {
+              const transactionId = getTransactionId(item);
+              return (
+                <div key={index} className="p-6 hover:bg-gray-50 transition-colors">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center mb-2">
+                        <ExclamationTriangleIcon
+                          className={`h-5 w-5 mr-2 ${
+                            item.type === 'global' ? 'text-red-500' : 'text-yellow-500'
+                          }`}
+                        />
+                        <span
+                          className={`px-2 py-1 rounded-full text-xs font-medium ${getAnomalyColor(item.z_score)}`}
+                        >
+                          {item.type || 'anomaly'} · Z-score: {item.z_score.toFixed(2)}
+                        </span>
+                      </div>
 
-                    <p className="text-lg font-medium text-gray-900 mb-1">
-                      {item.description || item.desc || 'Unknown transaction'}
-                    </p>
-
-                    <div className="flex items-center text-sm text-gray-500 mb-2">
-                      <span>
-                        {item.date ? format(new Date(item.date), 'MMM dd, yyyy') : 'Unknown date'}
-                      </span>
-                      <span className="mx-2">•</span>
-                      <span>{item.category || 'Uncategorized'}</span>
-                    </div>
-
-                    {item.reason && (
-                      <p className="text-sm text-gray-600 bg-gray-50 p-2 rounded-lg">
-                        {item.reason}
+                      <p className="text-lg font-medium text-gray-900 mb-1">
+                        {item.description || item.desc || 'Unknown transaction'}
                       </p>
-                    )}
-                  </div>
 
-                  <div className="text-right ml-4">
-                    <p className="text-xl font-bold text-gray-900">{formatCurrency(item.amount)}</p>
-                    {item.transaction_id && onViewTransaction && (
-                      <button
-                        onClick={() => onViewTransaction(item.transaction_id!)}
-                        className="mt-2 text-sm text-primary-600 hover:text-primary-700 flex items-center"
-                      >
-                        <EyeIcon className="h-4 w-4 mr-1" />
-                        View
-                      </button>
-                    )}
+                      <div className="flex items-center text-sm text-gray-500 mb-2">
+                        <span>
+                          {item.date ? format(new Date(item.date), 'MMM dd, yyyy') : 'Unknown date'}
+                        </span>
+                        <span className="mx-2">•</span>
+                        <span>{item.category || 'Uncategorized'}</span>
+                      </div>
+
+                      {item.reason && (
+                        <p className="text-sm text-gray-600 bg-gray-50 p-2 rounded-lg">
+                          {item.reason}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="text-right ml-4">
+                      <p className="text-xl font-bold text-gray-900">
+                        {formatCurrency(item.amount)}
+                      </p>
+                      {transactionId && onViewTransaction && (
+                        <button
+                          onClick={() => onViewTransaction(transactionId)}
+                          className="mt-2 text-sm text-primary-600 hover:text-primary-700 flex items-center"
+                        >
+                          <EyeIcon className="h-4 w-4 mr-1" />
+                          View
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <div className="p-12 text-center">

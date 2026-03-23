@@ -19,18 +19,7 @@ import {
 
 import { NavLink } from 'react-router-dom';
 
-const navigation = [
-  { name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
-  { name: 'Transactions', href: '/transactions', icon: CreditCardIcon },
-  { name: 'Categories', href: '/categories', icon: TagIcon },
-  { name: 'Budgets', href: '/budgets', icon: CalculatorIcon },
-  { name: 'Analytics', href: '/analytics', icon: ChartPieIcon },
-  { name: 'Reports', href: '/reports', icon: DocumentTextIcon },
-  { name: 'Exports/Imports', href: '/exports-imports', icon: ArrowDownTrayIcon },
-  { name: 'Users', href: '/users', icon: UsersIcon },
-  { name: 'Admin', href: '/admin', icon: ShieldCheckIcon },
-  { name: 'Settings', href: '/settings', icon: Cog6ToothIcon },
-];
+import { useAuth } from '../../context/AuthContext';
 
 interface SidebarProps {
   open: boolean;
@@ -38,6 +27,34 @@ interface SidebarProps {
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ open, setOpen }) => {
+  const { user } = useAuth();
+
+  // Base navigation items for all authenticated users
+  const baseNavigation = [
+    { name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
+    { name: 'Transactions', href: '/transactions', icon: CreditCardIcon },
+    { name: 'Categories', href: '/categories', icon: TagIcon },
+    { name: 'Budgets', href: '/budgets', icon: CalculatorIcon },
+    { name: 'Analytics', href: '/analytics', icon: ChartPieIcon },
+    { name: 'Reports', href: '/reports', icon: DocumentTextIcon },
+    { name: 'Exports/Imports', href: '/exports-imports', icon: ArrowDownTrayIcon },
+    { name: 'Settings', href: '/settings', icon: Cog6ToothIcon },
+  ];
+
+  // Admin-only navigation items
+  const adminNavigation = [
+    { name: 'Users', href: '/users', icon: UsersIcon },
+    { name: 'Admin', href: '/admin', icon: ShieldCheckIcon },
+  ];
+
+  // Combine navigation based on user role
+  const navigation = [...baseNavigation];
+
+  // Add admin items if user is admin
+  if (user?.role === 'admin') {
+    navigation.push(...adminNavigation);
+  }
+
   return (
     <>
       {/* Mobile sidebar */}

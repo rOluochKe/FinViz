@@ -7,6 +7,7 @@ import uuid
 from flask import request
 from flask_jwt_extended import get_jwt_identity, jwt_required
 from flask_restx import Namespace, Resource, fields
+from sqlalchemy import or_
 
 from app.extensions import db
 from app.models.user import User
@@ -98,6 +99,7 @@ class UserList(Resource):
     )
     @users_ns.param("page", "Page number", type="integer", default=1)
     @users_ns.param("per_page", "Items per page", type="integer", default=20)
+    @users_ns.param("search", "Search by username, email, or name", type="string")
     @users_ns.marshal_with(users_response_model)
     @jwt_required()
     @admin_required
@@ -105,9 +107,26 @@ class UserList(Resource):
         """Get paginated list of all users"""
         page = request.args.get("page", 1, type=int)
         per_page = min(request.args.get("per_page", 20, type=int), 100)
+        search = request.args.get("search", "")
 
-        query = User.query.order_by(User.created_at.desc())
-        paginated = query.paginate(page=page, per_page=per_page)
+        query = User.query
+
+        # Apply search filter
+        if search:
+            search_term = f"%{search}%"
+            query = query.filter(
+                or_(
+                    User.username.ilike(search_term),
+                    User.email.ilike(search_term),
+                    User.first_name.ilike(search_term),
+                    User.last_name.ilike(search_term),
+                    # Fix: Use concat with || operator and compare to search term
+                    (User.first_name + " " + User.last_name).ilike(search_term),
+                )
+            )
+
+        query = query.order_by(User.created_at.desc())
+        paginated = query.paginate(page=page, per_page=per_page, error_out=False)
 
         return {
             "users": UserSchema(many=True).dump(paginated.items),

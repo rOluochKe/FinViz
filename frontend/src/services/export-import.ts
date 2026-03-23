@@ -27,11 +27,20 @@ class ExportImportService {
   async exportTransactions(
     options: ExportOptions
   ): Promise<{ filename: string; download_url: string }> {
-    return api.post('/exports/transactions', options, {
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
+    const params = new URLSearchParams();
+    params.append('format', options.format);
+
+    if (options.start_date) {
+      params.append('start_date', options.start_date);
+    }
+    if (options.end_date) {
+      params.append('end_date', options.end_date);
+    }
+    if (options.category_id) {
+      params.append('category_id', options.category_id);
+    }
+
+    return api.get(`/exports/transactions?${params.toString()}`);
   }
 
   /**
@@ -40,22 +49,40 @@ class ExportImportService {
   async exportCategories(
     options: ExportOptions
   ): Promise<{ filename: string; download_url: string }> {
-    return api.post('/exports/categories', options, {
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
+    const params = new URLSearchParams();
+    params.append('format', options.format);
+
+    if (options.start_date) {
+      params.append('start_date', options.start_date);
+    }
+    if (options.end_date) {
+      params.append('end_date', options.end_date);
+    }
+    if (options.category_id) {
+      params.append('category_id', options.category_id);
+    }
+
+    return api.get(`/exports/categories?${params.toString()}`);
   }
 
   /**
    * Export budgets to file
    */
   async exportBudgets(options: ExportOptions): Promise<{ filename: string; download_url: string }> {
-    return api.post('/exports/budgets', options, {
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
+    const params = new URLSearchParams();
+    params.append('format', options.format);
+
+    if (options.start_date) {
+      params.append('start_date', options.start_date);
+    }
+    if (options.end_date) {
+      params.append('end_date', options.end_date);
+    }
+    if (options.category_id) {
+      params.append('category_id', options.category_id);
+    }
+
+    return api.get(`/exports/budgets?${params.toString()}`);
   }
 
   /**
@@ -127,27 +154,46 @@ class ExportImportService {
     const formData = new FormData();
     formData.append('file', file);
 
-    return api.post('/imports/upload', formData, {
+    const response = await api.post<{
+      message: string;
+      file: { filename: string; original: string; size: number };
+    }>('/imports/upload', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
     });
+
+    // Extract the filename from the response
+    return {
+      file_id: response.file.filename,
+      filename: response.file.filename,
+      size: response.file.size,
+    };
   }
 
   /**
    * Validate import file
    */
-  async validateFile(fileId: string): Promise<ImportPreview> {
-    return api.post('/imports/validate', { file_id: fileId });
+  async validateFile(filename: string): Promise<ImportPreview> {
+    return api.post('/imports/validate', { filename });
   }
 
   /**
    * Preview import
    */
-  async previewImport(fileId: string, mapping?: Record<string, string>): Promise<ImportPreview> {
-    return api.post('/imports/preview', {
-      file_id: fileId,
-      mapping,
+  async previewImport(filename: string, mapping?: Record<string, string>): Promise<ImportPreview> {
+    const payload: { filename: string; mapping?: Record<string, string> } = {
+      filename: filename,
+    };
+
+    if (mapping && Object.keys(mapping).length > 0) {
+      payload.mapping = mapping;
+    }
+
+    return api.post('/imports/preview', payload, {
+      headers: {
+        'Content-Type': 'application/json',
+      },
     });
   }
 
@@ -155,7 +201,7 @@ class ExportImportService {
    * Execute import
    */
   async executeImport(
-    fileId: string,
+    filename: string,
     mapping: Record<string, string>,
     options?: {
       skip_errors?: boolean;
@@ -164,7 +210,7 @@ class ExportImportService {
     }
   ): Promise<ImportResult> {
     return api.post('/imports/execute', {
-      file_id: fileId,
+      filename: filename,
       mapping,
       options,
     });

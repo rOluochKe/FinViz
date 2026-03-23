@@ -4,13 +4,12 @@ Health check routes with Flask-RESTX.
 
 import os
 import platform
-import uuid
 from datetime import datetime
 
 import psutil
 from flask import current_app, request
 from flask_restx import Namespace, Resource, fields
-from sqlalchemy import func, text
+from sqlalchemy import text
 
 from app.extensions import cache, db
 from app.utils.constants import HTTP_STATUS

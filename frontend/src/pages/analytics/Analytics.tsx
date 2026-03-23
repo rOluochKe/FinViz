@@ -41,8 +41,8 @@ type AnalyticsView =
 const Analytics: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [view, setView] = useState<AnalyticsView>('overview');
-  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
-  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
+  const [selectedYear] = useState(new Date().getFullYear());
+  const [selectedMonth] = useState(new Date().getMonth() + 1);
 
   // Data states
   const [patterns, setPatterns] = useState<SpendingPatternsType | null>(null);
@@ -54,6 +54,7 @@ const Analytics: React.FC = () => {
   const [yearlyReport, setYearlyReport] = useState<YearlyReport | null>(null);
   const [categoryReport, setCategoryReport] = useState<CategoryReport | null>(null);
   const [categoryInsights, setCategoryInsights] = useState<CategoryInsight[]>([]);
+  const [reportLoading, setReportLoading] = useState(false);
 
   // Modal states
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
@@ -110,53 +111,77 @@ const Analytics: React.FC = () => {
 
   // Load monthly report
   const loadMonthlyReport = async () => {
+    setReportLoading(true);
     try {
       const data = await analyticsService.getMonthlyReport(selectedYear, selectedMonth);
-      setMonthlyReport(data);
-      setIsReportModalOpen(true);
-    } catch (error) {
-      toast.error('Failed to load monthly report');
+      if (data && data.summary) {
+        setMonthlyReport(data);
+        setIsReportModalOpen(true);
+      } else {
+        toast.error('No data available for the selected period');
+      }
+    } catch (error: any) {
+      console.error('Failed to load monthly report:', error);
+      toast.error(error?.message || 'Failed to load monthly report');
+    } finally {
+      setReportLoading(false);
     }
   };
 
   // Load yearly report
   const loadYearlyReport = async () => {
+    setReportLoading(true);
     try {
       const data = await analyticsService.getYearlyReport(selectedYear);
-      setYearlyReport(data);
-      setIsReportModalOpen(true);
-    } catch (error) {
-      toast.error('Failed to load yearly report');
+      if (data && data.summary) {
+        setYearlyReport(data);
+        setIsReportModalOpen(true);
+      } else {
+        toast.error('No data available for the selected year');
+      }
+    } catch (error: any) {
+      console.error('Failed to load yearly report:', error);
+      toast.error(error?.message || 'Failed to load yearly report');
+    } finally {
+      setReportLoading(false);
     }
   };
 
   // Load category report
-  const loadCategoryReport = async (categoryId: number) => {
+  const loadCategoryReport = async (categoryId: string) => {
     try {
       const data = await analyticsService.getCategoryReport(categoryId, 12);
-      setCategoryReport(data);
-      setIsCategoryModalOpen(true);
-    } catch (error) {
-      toast.error('Failed to load category report');
+      if (data && data.category) {
+        setCategoryReport(data);
+        setIsCategoryModalOpen(true);
+      } else {
+        toast.error('No data available for this category');
+      }
+    } catch (error: any) {
+      console.error('Failed to load category report:', error);
+      toast.error(error?.message || 'Failed to load category report');
     }
   };
 
-  const monthOptions = [
-    { value: 1, label: 'January' },
-    { value: 2, label: 'February' },
-    { value: 3, label: 'March' },
-    { value: 4, label: 'April' },
-    { value: 5, label: 'May' },
-    { value: 6, label: 'June' },
-    { value: 7, label: 'July' },
-    { value: 8, label: 'August' },
-    { value: 9, label: 'September' },
-    { value: 10, label: 'October' },
-    { value: 11, label: 'November' },
-    { value: 12, label: 'December' },
-  ];
-
-  const yearOptions = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 2 + i);
+  // Safe summary data for overview with null checks
+  const getSummaryData = () => {
+    if (patterns && patterns.summary) {
+      return {
+        total_income: patterns.summary.total_spending || 0,
+        total_expense: patterns.summary.total_spending || 0,
+        net_savings: patterns.summary.total_spending * 0.2 || 0,
+        savings_rate: 20,
+        transaction_count: patterns.summary.transaction_count || 0,
+      };
+    }
+    return {
+      total_income: 0,
+      total_expense: 0,
+      net_savings: 0,
+      savings_rate: 0,
+      transaction_count: 0,
+    };
+  };
 
   return (
     <div className="space-y-6">
@@ -167,49 +192,26 @@ const Analytics: React.FC = () => {
           <p className="mt-1 text-sm text-gray-500">Deep insights into your financial patterns</p>
         </div>
         <div className="flex space-x-2">
-          <Button variant="secondary" size="sm" onClick={loadMonthlyReport}>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={loadMonthlyReport}
+            isLoading={reportLoading}
+          >
             <CalendarIcon className="h-4 w-4 mr-2" />
             Monthly Report
           </Button>
-          <Button variant="secondary" size="sm" onClick={loadYearlyReport}>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={loadYearlyReport}
+            isLoading={reportLoading}
+          >
             <ChartBarIcon className="h-4 w-4 mr-2" />
             Yearly Report
           </Button>
         </div>
       </div>
-
-      {/* Report Period Selector (when report modal is open) */}
-      {isReportModalOpen && (
-        <div className="bg-white rounded-lg shadow p-4">
-          <div className="flex items-center gap-4">
-            <select
-              value={selectedYear}
-              onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-              className="input-field text-sm py-1 w-24"
-            >
-              {yearOptions.map((year) => (
-                <option key={year} value={year}>
-                  {year}
-                </option>
-              ))}
-            </select>
-            <select
-              value={selectedMonth}
-              onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
-              className="input-field text-sm py-1 w-32"
-            >
-              {monthOptions.map((month) => (
-                <option key={month.value} value={month.value}>
-                  {month.label}
-                </option>
-              ))}
-            </select>
-            <Button size="sm" onClick={loadMonthlyReport}>
-              Load Report
-            </Button>
-          </div>
-        </div>
-      )}
 
       {/* Navigation Tabs */}
       <div className="border-b border-gray-200 overflow-x-auto">
@@ -290,63 +292,66 @@ const Analytics: React.FC = () => {
       ) : (
         <div>
           {/* Overview View */}
-          {view === 'overview' && patterns && anomalies && (
+          {view === 'overview' && (
             <div className="space-y-6">
-              <SummaryCards
-                data={{
-                  total_income: patterns.summary.total_spending,
-                  total_expense: patterns.summary.total_spending,
-                  net_savings: patterns.summary.total_spending * 0.2,
-                  savings_rate: 20,
-                  transaction_count: patterns.summary.transaction_count,
-                }}
-                period="Last 6 months"
-              />
+              <SummaryCards data={getSummaryData()} period="Last 6 months" />
 
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <SpendingPatterns data={patterns} />
-                <div className="space-y-6">
-                  <div className="bg-white rounded-lg shadow p-6">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Category Insights</h3>
-                    <div className="space-y-3">
-                      {categoryInsights.slice(0, 5).map((insight) => (
-                        <div
-                          key={insight.category_id}
-                          className="flex items-center justify-between p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100"
-                          onClick={() => loadCategoryReport(insight.category_id)}
-                        >
-                          <div className="flex items-center">
+              {patterns && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <SpendingPatterns data={patterns} />
+                  <div className="space-y-6">
+                    <div className="bg-white rounded-lg shadow p-6">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                        Category Insights
+                      </h3>
+                      <div className="space-y-3">
+                        {categoryInsights && categoryInsights.length > 0 ? (
+                          categoryInsights.slice(0, 5).map((insight) => (
                             <div
-                              className="w-3 h-3 rounded-full mr-2"
-                              style={{ backgroundColor: insight.color }}
-                            />
-                            <span className="text-sm font-medium text-gray-700">
-                              {insight.category}
-                            </span>
-                          </div>
-                          <span className="text-sm text-gray-600">
-                            {insight.count} transactions
-                          </span>
-                        </div>
-                      ))}
+                              key={insight.category_id}
+                              className="flex items-center justify-between p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100"
+                              onClick={() => loadCategoryReport(String(insight.category_id))}
+                            >
+                              <div className="flex items-center">
+                                <div
+                                  className="w-3 h-3 rounded-full mr-2"
+                                  style={{ backgroundColor: insight.color }}
+                                />
+                                <span className="text-sm font-medium text-gray-700">
+                                  {insight.category}
+                                </span>
+                              </div>
+                              <span className="text-sm text-gray-600">
+                                {insight.count} transactions
+                              </span>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-sm text-gray-500 text-center py-4">
+                            No category insights available
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="bg-white rounded-lg shadow p-6">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                        Anomalies Summary
+                      </h3>
+                      <p className="text-3xl font-bold text-red-600">{anomalies?.anomalies || 0}</p>
+                      <p className="text-sm text-gray-500">anomalies detected</p>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="mt-4"
+                        onClick={() => setView('anomalies')}
+                      >
+                        View Details
+                      </Button>
                     </div>
                   </div>
-
-                  <div className="bg-white rounded-lg shadow p-6">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Anomalies Summary</h3>
-                    <p className="text-3xl font-bold text-red-600">{anomalies.anomalies}</p>
-                    <p className="text-sm text-gray-500">anomalies detected</p>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      className="mt-4"
-                      onClick={() => setView('anomalies')}
-                    >
-                      View Details
-                    </Button>
-                  </div>
                 </div>
-              </div>
+              )}
             </div>
           )}
 
@@ -356,7 +361,6 @@ const Analytics: React.FC = () => {
             <Anomalies
               data={anomalies}
               onViewTransaction={(id) => {
-                // Navigate to transaction or show details
                 toast.success(`Viewing transaction ${id}`);
               }}
             />
@@ -370,42 +374,54 @@ const Analytics: React.FC = () => {
       {/* Monthly/Yearly Report Modal */}
       <Modal
         isOpen={isReportModalOpen}
-        onClose={() => setIsReportModalOpen(false)}
+        onClose={() => {
+          setIsReportModalOpen(false);
+          setMonthlyReport(null);
+          setYearlyReport(null);
+        }}
         title={
           monthlyReport
-            ? `Monthly Report - ${monthlyReport.period}`
-            : `Yearly Report - ${selectedYear}`
+            ? `Monthly Report - ${monthlyReport.period || `${selectedYear}-${selectedMonth}`}`
+            : yearlyReport
+              ? `Yearly Report - ${yearlyReport.year || selectedYear}`
+              : 'Report'
         }
         size="xl"
       >
-        {monthlyReport && (
+        {monthlyReport && monthlyReport.summary && (
           <div className="space-y-4">
             <SummaryCards
               data={{
-                total_income: monthlyReport.summary.income,
-                total_expense: monthlyReport.summary.expense,
-                net_savings: monthlyReport.summary.savings,
-                savings_rate: monthlyReport.summary.rate,
-                transaction_count: monthlyReport.summary.count,
+                total_income: monthlyReport.summary.income || 0,
+                total_expense: monthlyReport.summary.expense || 0,
+                net_savings: monthlyReport.summary.savings || 0,
+                savings_rate: monthlyReport.summary.rate || 0,
+                transaction_count: monthlyReport.summary.count || 0,
               }}
-              period={monthlyReport.period}
+              period={monthlyReport.period || `${selectedYear}-${selectedMonth}`}
             />
-            {/* Add more report details here */}
           </div>
         )}
-        {yearlyReport && (
+        {yearlyReport && yearlyReport.summary && (
           <div className="space-y-4">
             <SummaryCards
               data={{
-                total_income: yearlyReport.summary.income,
-                total_expense: yearlyReport.summary.expense,
-                net_savings: yearlyReport.summary.savings,
-                savings_rate: yearlyReport.summary.rate,
-                transaction_count: yearlyReport.summary.count,
+                total_income: yearlyReport.summary.income || 0,
+                total_expense: yearlyReport.summary.expense || 0,
+                net_savings: yearlyReport.summary.savings || 0,
+                savings_rate: yearlyReport.summary.rate || 0,
+                transaction_count: yearlyReport.summary.count || 0,
               }}
-              period={`Year ${yearlyReport.year}`}
+              period={`Year ${yearlyReport.year || selectedYear}`}
             />
-            {/* Add more report details here */}
+          </div>
+        )}
+        {(!monthlyReport || !monthlyReport.summary) && (!yearlyReport || !yearlyReport.summary) && (
+          <div className="text-center py-8">
+            <p className="text-gray-500">No report data available</p>
+            <p className="text-sm text-gray-400 mt-2">
+              Try selecting a different period or add more transactions.
+            </p>
           </div>
         )}
       </Modal>
@@ -413,19 +429,22 @@ const Analytics: React.FC = () => {
       {/* Category Report Modal */}
       <Modal
         isOpen={isCategoryModalOpen}
-        onClose={() => setIsCategoryModalOpen(false)}
+        onClose={() => {
+          setIsCategoryModalOpen(false);
+          setCategoryReport(null);
+        }}
         title="Category Report"
         size="lg"
       >
-        {categoryReport && (
+        {categoryReport && categoryReport.category && (
           <div className="space-y-4">
             <div className="flex items-center">
               <div
                 className="w-4 h-4 rounded-full mr-2"
-                style={{ backgroundColor: categoryReport.category.color }}
+                style={{ backgroundColor: categoryReport.category.color || '#808080' }}
               />
               <h3 className="text-xl font-semibold text-gray-900">
-                {categoryReport.category.name}
+                {categoryReport.category.name || 'Unknown Category'}
               </h3>
             </div>
             <div className="grid grid-cols-3 gap-4">
@@ -433,7 +452,7 @@ const Analytics: React.FC = () => {
                 <p className="text-sm text-gray-500">Total</p>
                 <p className="text-xl font-bold text-gray-900">
                   {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(
-                    categoryReport.summary.total
+                    categoryReport.summary.total || 0
                   )}
                 </p>
               </div>
@@ -441,15 +460,22 @@ const Analytics: React.FC = () => {
                 <p className="text-sm text-gray-500">Average</p>
                 <p className="text-xl font-bold text-gray-900">
                   {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(
-                    categoryReport.summary.avg
+                    categoryReport.summary.avg || 0
                   )}
                 </p>
               </div>
               <div className="bg-gray-50 rounded-lg p-4 text-center">
                 <p className="text-sm text-gray-500">Count</p>
-                <p className="text-xl font-bold text-gray-900">{categoryReport.summary.count}</p>
+                <p className="text-xl font-bold text-gray-900">
+                  {categoryReport.summary.count || 0}
+                </p>
               </div>
             </div>
+          </div>
+        )}
+        {(!categoryReport || !categoryReport.category) && (
+          <div className="text-center py-8">
+            <p className="text-gray-500">No category data available</p>
           </div>
         )}
       </Modal>

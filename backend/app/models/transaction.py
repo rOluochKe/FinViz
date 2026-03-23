@@ -68,7 +68,7 @@ class Transaction(db.Model):
     child_transactions = db.relationship(
         "Transaction", backref=db.backref("parent", remote_side=[id]), lazy="dynamic"
     )
-    category = db.relationship("Category", back_populates="transactions")
+    category = db.relationship("Category", back_populates="transactions", lazy="joined")
     user = db.relationship("User", back_populates="transactions")
 
     # Indexes for performance
@@ -248,15 +248,37 @@ class Transaction(db.Model):
             "formatted_amount": self.formatted_amount,
         }
 
-        # Lazy load category data to avoid circular imports
+        # Lazy load category data - FIX: Use the relationship directly since we have lazy="joined"
         if include_relationships and self.category_id:
-            result = db.session.execute(
-                text("SELECT name, color FROM categories WHERE id = :id"),
-                {"id": str(self.category_id)},
-            ).first()
-            if result:
-                data["category_name"] = result.name
-                data["category_color"] = result.color
+            # Since we have lazy="joined", self.category should be loaded
+            if self.category is not None:
+                data["category_name"] = self.category.name
+                data["category_color"] = self.category.color
+            else:
+                # Fallback: try to query if relationship isn't loaded
+                try:
+                    from app.models.category import Category
+
+                    category = Category.query.get(self.category_id)
+                    if category:
+                        data["category_name"] = category.name
+                        data["category_color"] = category.color
+                        # Cache the relationship for future use
+                        self.category = category
+                    else:
+                        data["category_name"] = None
+                        data["category_color"] = None
+                except Exception as e:
+                    import logging
+
+                    logging.error(
+                        f"Failed to load category for transaction {self.id}: {e}"
+                    )
+                    data["category_name"] = None
+                    data["category_color"] = None
+        else:
+            data["category_name"] = None
+            data["category_color"] = None
 
         return data
 

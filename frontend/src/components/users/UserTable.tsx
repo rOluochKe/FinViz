@@ -151,7 +151,7 @@ const UserTable: React.FC<UserTableProps> = ({
     }
   };
 
-  // Column definitions
+  // Column definitions - update to handle string IDs
   const columns = [
     {
       name: 'User',
@@ -229,7 +229,7 @@ const UserTable: React.FC<UserTableProps> = ({
         <div className="flex items-center">
           <CalendarIcon className="h-4 w-4 text-gray-400 mr-2" />
           <span className="text-sm text-gray-600">
-            {format(new Date(row.created_at), 'MMM dd, yyyy')}
+            {row.created_at ? format(new Date(row.created_at), 'MMM dd, yyyy') : 'N/A'}
           </span>
         </div>
       ),
@@ -264,7 +264,7 @@ const UserTable: React.FC<UserTableProps> = ({
             >
               <XCircleIcon className="h-5 w-5" />
             </button>
-          ) : (
+          ) : row.status === 'inactive' ? (
             <button
               onClick={() => handleActivate(row)}
               className="p-1 text-green-600 hover:text-green-800 transition-colors"
@@ -272,7 +272,7 @@ const UserTable: React.FC<UserTableProps> = ({
             >
               <CheckCircleIcon className="h-5 w-5" />
             </button>
-          )}
+          ) : null}
 
           <button
             onClick={() => handleDeleteClick(row)}

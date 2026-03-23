@@ -2,20 +2,17 @@
 Dashboard routes with Flask-RESTX.
 """
 
-import logging
 import uuid
-from collections import defaultdict
-from datetime import date, datetime, timedelta
-from functools import wraps
+from datetime import date, datetime
 
 from flask import request
 from flask_jwt_extended import get_jwt_identity, jwt_required
 from flask_restx import Namespace, Resource, fields
 
-from app.extensions import cache
 from app.models.transaction import Transaction
 from app.services.budget_service import BudgetService
 from app.services.dashboard_service import DashboardService
+from app.utils.decorators import safe_cache_cached
 
 # Create namespace
 dashboard_ns = Namespace("dashboard", description="Dashboard operations")
@@ -145,33 +142,6 @@ net_worth_model = dashboard_ns.model(
     },
 )
 
-# ============================================================================
-# Helper Decorator
-# ============================================================================
-
-
-def safe_cache_cached(timeout=60):
-    """
-    Decorator that safely handles cache unavailability.
-    If Redis is not available, it skips caching and executes the function directly.
-    """
-
-    def decorator(f):
-        @wraps(f)
-        def decorated_function(*args, **kwargs):
-            try:
-                # Try to use cache if available
-                return cache.cached(timeout=timeout)(f)(*args, **kwargs)
-            except Exception as e:
-                # If cache fails (Redis not available), just execute the function directly
-                # Log the error at debug level to avoid noise
-                logging.getLogger(__name__).debug(f"Cache unavailable: {str(e)}")
-                return f(*args, **kwargs)
-
-        return decorated_function
-
-    return decorator
-
 
 # ============================================================================
 # API Endpoints
@@ -226,15 +196,29 @@ class DashboardRecent(Resource):
         responses={200: "Recent transactions retrieved"},
     )
     @dashboard_ns.param("limit", "Number of transactions", type="integer", default=10)
-    @dashboard_ns.marshal_list_with(recent_transaction_model)
     @jwt_required()
     def get(self):
         """Get recent transactions"""
         user_id = get_jwt_identity()
+
+        # Convert user_id to UUID
+        if isinstance(user_id, str):
+            try:
+                user_uuid = uuid.UUID(user_id)
+            except ValueError:
+                dashboard_ns.abort(400, "Invalid user ID format")
+        else:
+            user_uuid = user_id
+
         limit = request.args.get("limit", 10, type=int)
 
-        recent = DashboardService.get_recent_transactions(user_id, limit)
-        return recent
+        recent = DashboardService.get_recent_transactions(user_uuid, limit)
+
+        # Log the first transaction to debug
+        if recent:
+            print(f"First transaction: {recent[0]}")
+
+        return recent  # Return the list directly, not wrapped
 
 
 @dashboard_ns.route("/spending-by-category")

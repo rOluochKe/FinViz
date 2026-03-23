@@ -5,6 +5,7 @@ Report service for generating financial reports.
 import uuid
 from collections import defaultdict
 from datetime import date, datetime, timedelta
+from decimal import Decimal
 from typing import Dict
 
 from app.extensions import db
@@ -18,17 +19,43 @@ class ReportService:
     """Service for generating financial reports."""
 
     @staticmethod
-    def monthly_report(user_id: uuid.UUID, year: int, month: int) -> Dict:
+    def has_data_for_year(user_id: uuid.UUID, year: int) -> bool:
         """
-        Generate monthly financial report.
+        Check if there are transactions for a given year.
 
         Args:
             user_id: User ID (UUID)
-            year: Year
-            month: Month
+            year: Year to check
 
         Returns:
-            Monthly report data
+            bool: True if transactions exist for that year
+        """
+        start_date = date(year, 1, 1)
+        end_date = date(year + 1, 1, 1)
+
+        count = Transaction.query.filter(
+            Transaction.user_id == user_id,
+            Transaction.date >= start_date,
+            Transaction.date < end_date,
+        ).count()
+
+        return count > 0
+
+    @staticmethod
+    def _decimal_to_float(value):
+        """Convert Decimal to float for JSON serialization."""
+        if isinstance(value, Decimal):
+            return float(value)
+        if isinstance(value, dict):
+            return {k: ReportService._decimal_to_float(v) for k, v in value.items()}
+        if isinstance(value, list):
+            return [ReportService._decimal_to_float(item) for item in value]
+        return value
+
+    @staticmethod
+    def monthly_report(user_id: uuid.UUID, year: int, month: int) -> Dict:
+        """
+        Generate monthly financial report.
         """
         start = date(year, month, 1)
         end = date(year + 1, 1, 1) if month == 12 else date(year, month + 1, 1)
@@ -42,6 +69,22 @@ class ReportService:
 
         income = sum(t.amount for t in tx if t.is_income)
         expense = sum(t.amount for t in tx if t.is_expense)
+
+        # If no transactions, return empty report
+        if not tx:
+            return {
+                "period": f"{year}-{month:02d}",
+                "summary": {
+                    "income": 0,
+                    "expense": 0,
+                    "savings": 0,
+                    "rate": 0,
+                    "count": 0,
+                },
+                "categories": [],
+                "daily": [],
+                "budgets": [],
+            }
 
         # Category breakdown
         cats = defaultdict(lambda: {"amount": 0, "count": 0})
@@ -75,19 +118,25 @@ class ReportService:
                 {
                     "category": b.category.name if b.category else None,
                     "budget": float(b.amount),
-                    "spent": b.spent,
-                    "remaining": float(b.amount) - b.spent,
-                    "percent": (b.spent / float(b.amount) * 100) if b.amount > 0 else 0,
+                    "spent": float(b.spent),
+                    "remaining": float(b.amount) - float(b.spent),
+                    "percent": (
+                        (float(b.spent) / float(b.amount) * 100) if b.amount > 0 else 0
+                    ),
                 }
             )
 
-        return {
+        result = {
             "period": f"{year}-{month:02d}",
             "summary": {
                 "income": float(income),
                 "expense": float(expense),
                 "savings": float(income - expense),
-                "rate": ((income - expense) / income * 100) if income > 0 else 0,
+                "rate": (
+                    ((float(income - expense) / float(income)) * 100)
+                    if income > 0
+                    else 0
+                ),
                 "count": len(tx),
             },
             "categories": [
@@ -99,6 +148,8 @@ class ReportService:
             "daily": [{"day": d, "amount": v} for d, v in sorted(daily.items())],
             "budgets": budget_data,
         }
+
+        return ReportService._decimal_to_float(result)
 
     @staticmethod
     def yearly_report(user_id: uuid.UUID, year: int) -> Dict:
@@ -161,7 +212,7 @@ class ReportService:
             .all()
         )
 
-        return {
+        result = {
             "year": year,
             "summary": {
                 "income": float(total_income),
@@ -183,6 +234,8 @@ class ReportService:
                 min(monthly, key=lambda x: x["savings"]) if monthly else None
             ),
         }
+
+        return ReportService._decimal_to_float(result)
 
     @staticmethod
     def category_report(
@@ -227,7 +280,7 @@ class ReportService:
         # Statistics
         amounts = [float(t.amount) for t in tx]
 
-        return {
+        result = {
             "category": {
                 "id": str(category_id),
                 "name": category.name if category else "Unknown",
@@ -237,9 +290,9 @@ class ReportService:
             "period": f"Last {months} months",
             "summary": {
                 "total": sum(amounts),
-                "avg": sum(amounts) / len(amounts),
-                "max": max(amounts),
-                "min": min(amounts),
+                "avg": sum(amounts) / len(amounts) if amounts else 0,
+                "max": max(amounts) if amounts else 0,
+                "min": min(amounts) if amounts else 0,
                 "count": len(amounts),
             },
             "monthly": [{"month": k, "amount": v} for k, v in sorted(monthly.items())],
@@ -252,3 +305,5 @@ class ReportService:
                 for t in tx[-10:]
             ][::-1],
         }
+
+        return ReportService._decimal_to_float(result)

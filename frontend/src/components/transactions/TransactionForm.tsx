@@ -8,6 +8,8 @@ import { SubmitHandler, useForm } from 'react-hook-form';
 
 import * as yup from 'yup';
 
+import toast from 'react-hot-toast';
+
 import api from '../../services/api';
 import { Category, Transaction } from '../../types';
 import Button from '../common/Button';
@@ -19,9 +21,8 @@ interface TransactionFormProps {
   onCancel: () => void;
 }
 
-// Define the form data type
 interface TransactionFormData {
-  category_id: number;
+  category_id: string;
   amount: number;
   description: string;
   date: string;
@@ -33,9 +34,8 @@ interface TransactionFormData {
   recurring_end_date?: string | null;
 }
 
-// Create schema with proper typing
 const schema = yup.object().shape({
-  category_id: yup.number().required('Category is required'),
+  category_id: yup.string().required('Category is required'),
   amount: yup
     .number()
     .required('Amount is required')
@@ -58,14 +58,24 @@ const schema = yup.object().shape({
   recurring_end_date: yup.string().nullable().optional(),
 });
 
-// Define API response type
-interface CategoriesResponse {
-  categories: Category[];
-}
+// Helper function for warning toast
+const showWarningToast = (message: string) => {
+  toast(message, {
+    icon: '⚠️',
+    duration: 5000,
+    style: {
+      background: '#FEF3C7',
+      color: '#92400E',
+      border: '1px solid #F59E0B',
+    },
+  });
+};
 
 const TransactionForm: React.FC<TransactionFormProps> = ({ initialData, onSubmit, onCancel }) => {
   const [categories, setCategories] = useState<Category[]>([]);
+  const [allCategories, setAllCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadingCategories, setLoadingCategories] = useState(true);
   const [tagInput, setTagInput] = useState('');
   const [tags, setTags] = useState<string[]>(initialData?.tags || []);
 
@@ -76,7 +86,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ initialData, onSubmit
     setValue,
     formState: { errors },
   } = useForm<TransactionFormData>({
-    resolver: yupResolver(schema) as any, // Type assertion to fix the resolver type issue
+    resolver: yupResolver(schema) as any,
     defaultValues: initialData
       ? {
           category_id: initialData.category_id,
@@ -100,24 +110,51 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ initialData, onSubmit
 
   const isRecurring = watch('is_recurring');
   const transactionType = watch('type');
+  const selectedCategoryId = watch('category_id');
 
-  // Load categories
+  // Load all categories first
   useEffect(() => {
-    const loadCategories = async () => {
+    const loadAllCategories = async () => {
+      setLoadingCategories(true);
       try {
-        const response = await api.get<CategoriesResponse>('/categories');
-        setCategories(response.categories || []);
+        const response = await api.get<Category[]>('/categories');
+        const allCats = response || [];
+        setAllCategories(allCats);
+
+        // Filter based on transaction type
+        const filtered = allCats.filter(
+          (cat) => cat.type === transactionType || transactionType === 'transfer'
+        );
+        setCategories(filtered);
+
+        // If editing, ensure the selected category is in the list
+        if (initialData?.category_id) {
+          const selectedCat = allCats.find((cat) => cat.id === initialData.category_id);
+          if (
+            selectedCat &&
+            selectedCat.type !== transactionType &&
+            transactionType !== 'transfer'
+          ) {
+            // Category type doesn't match current transaction type - show warning
+            showWarningToast(
+              `This transaction's category "${selectedCat.name}" is for ${selectedCat.type}, but transaction type is ${transactionType}.`
+            );
+          }
+        }
+
+        // If no categories exist, show message
+        if (filtered.length === 0 && allCats.length > 0) {
+          toast.error(`No ${transactionType} categories found. Please create one first.`);
+        }
       } catch (error) {
         console.error('Failed to load categories:', error);
+        toast.error('Failed to load categories');
+      } finally {
+        setLoadingCategories(false);
       }
     };
-    loadCategories();
-  }, []);
-
-  // Filter categories by type
-  const filteredCategories = categories.filter(
-    (cat) => cat.type === transactionType || transactionType === 'transfer'
-  );
+    loadAllCategories();
+  }, [transactionType, initialData]);
 
   // Handle tag addition
   const handleAddTag = () => {
@@ -145,9 +182,29 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ initialData, onSubmit
   };
 
   const onSubmitForm: SubmitHandler<TransactionFormData> = async (data) => {
+    // Validate category is selected
+    if (!data.category_id) {
+      toast.error('Please select a category');
+      return;
+    }
+
+    // Validate category exists in all categories
+    const selectedCat = allCategories.find((cat) => cat.id === data.category_id);
+    if (!selectedCat) {
+      toast.error('Selected category not found');
+      return;
+    }
+
+    // Validate category type matches transaction type
+    if (selectedCat.type !== data.type && data.type !== 'transfer') {
+      toast.error(
+        `Category "${selectedCat.name}" is for ${selectedCat.type}, but transaction type is ${data.type}. Please select a different category.`
+      );
+      return;
+    }
+
     setLoading(true);
     try {
-      // Prepare data for submission
       const submitData = {
         ...data,
         tags: tags,
@@ -157,6 +214,9 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ initialData, onSubmit
       setLoading(false);
     }
   };
+
+  // Get selected category name for display
+  const selectedCategory = allCategories.find((cat) => cat.id === selectedCategoryId);
 
   return (
     <form onSubmit={handleSubmit(onSubmitForm)} className="space-y-6">
@@ -198,16 +258,48 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ initialData, onSubmit
       {/* Category */}
       <div>
         <label htmlFor="category" className="input-label">
-          Category
+          Category <span className="text-red-500">*</span>
         </label>
-        <select id="category" {...register('category_id')} className="input-field">
+
+        {/* Show selected category name if editing and it's not in the filtered list */}
+        {initialData &&
+          selectedCategory &&
+          !categories.find((c) => c.id === selectedCategory.id) && (
+            <div className="mb-2 p-2 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">
+              Current category: <strong>{selectedCategory.name}</strong> (Type:{' '}
+              {selectedCategory.type})
+              <br />
+              <span className="text-xs">
+                This category may not match the selected transaction type.
+              </span>
+            </div>
+          )}
+
+        <select
+          id="category"
+          {...register('category_id')}
+          className="input-field"
+          disabled={loadingCategories}
+        >
           <option value="">Select a category</option>
-          {filteredCategories.map((category) => (
+          {categories.map((category) => (
             <option key={category.id} value={category.id}>
-              {category.name}
+              {category.name} {category.is_system ? '(System)' : ''} - {category.type}
             </option>
           ))}
         </select>
+
+        {loadingCategories && <p className="text-xs text-gray-500 mt-1">Loading categories...</p>}
+        {!loadingCategories && categories.length === 0 && allCategories.length > 0 && (
+          <p className="text-xs text-red-500 mt-1">
+            No {transactionType} categories found. Please create a {transactionType} category first.
+          </p>
+        )}
+        {!loadingCategories && allCategories.length === 0 && (
+          <p className="text-xs text-red-500 mt-1">
+            No categories found. Please create categories first.
+          </p>
+        )}
         {errors.category_id && <p className="input-error">{errors.category_id.message}</p>}
       </div>
 
@@ -251,7 +343,6 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ initialData, onSubmit
           </Button>
         </div>
 
-        {/* Tag list */}
         {tags.length > 0 && (
           <div className="flex flex-wrap gap-2 mt-2">
             {tags.map((tag, index) => (
@@ -329,7 +420,11 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ initialData, onSubmit
         <Button type="button" variant="secondary" onClick={onCancel}>
           Cancel
         </Button>
-        <Button type="submit" isLoading={loading}>
+        <Button
+          type="submit"
+          isLoading={loading}
+          disabled={categories.length === 0 && allCategories.length > 0}
+        >
           {initialData ? 'Update' : 'Create'} Transaction
         </Button>
       </div>

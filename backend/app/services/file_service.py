@@ -14,19 +14,33 @@ from werkzeug.utils import secure_filename
 class FileService:
     """Service for local file operations."""
 
-    ALLOWED_EXT = {"png", "jpg", "jpeg", "gif", "pdf", "csv", "xlsx", "txt"}
+    # Add more allowed extensions for imports
+    ALLOWED_EXT = {
+        "png",
+        "jpg",
+        "jpeg",
+        "gif",
+        "pdf",
+        "csv",
+        "xlsx",
+        "xls",
+        "txt",
+        "json",
+    }
     ALLOWED_MIMETYPES = {
         "image/png",
         "image/jpeg",
         "image/gif",
         "application/pdf",
         "text/csv",
+        "application/json",
         "application/vnd.ms-excel",
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         "text/plain",
     }
 
     def __init__(self):
+        # Get the absolute path for uploads
         self.base = Path(current_app.config.get("UPLOAD_FOLDER", "uploads"))
         self.receipts = self.base / "receipts"
         self.exports = self.base / "exports"
@@ -41,10 +55,10 @@ class FileService:
     @staticmethod
     def allowed_file(filename: str) -> bool:
         """Check if file extension is allowed."""
-        return (
-            "." in filename
-            and filename.rsplit(".", 1)[1].lower() in FileService.ALLOWED_EXT
-        )
+        if not filename or "." not in filename:
+            return False
+        ext = filename.rsplit(".", 1)[1].lower()
+        return ext in FileService.ALLOWED_EXT
 
     @staticmethod
     def allowed_mimetype(mimetype: str) -> bool:
@@ -52,23 +66,13 @@ class FileService:
         return mimetype in FileService.ALLOWED_MIMETYPES
 
     def save_receipt(self, file: BinaryIO, filename: str, user_id: uuid.UUID) -> Dict:
-        """
-        Save receipt file locally.
-
-        Args:
-            file: File object
-            filename: Original filename
-            user_id: User ID (UUID)
-
-        Returns:
-            Dict with file info
-        """
+        """Save receipt file locally."""
         secure = secure_filename(filename)
         ext = secure.rsplit(".", 1)[1].lower() if "." in secure else ""
         unique = f"{uuid.uuid4().hex}.{ext}"
 
         user_dir = self.receipts / str(user_id)
-        user_dir.mkdir(exist_ok=True)
+        user_dir.mkdir(parents=True, exist_ok=True)
 
         path = user_dir / unique
         file.save(str(path))
@@ -89,26 +93,16 @@ class FileService:
     def delete_receipt(self, filename: str, user_id: uuid.UUID) -> bool:
         """Delete receipt file."""
         path = self.get_receipt(filename, user_id)
-        if path:
+        if path and path.exists():
             path.unlink()
             return True
         return False
 
     def save_export(self, data: bytes, filename: str, user_id: uuid.UUID) -> Dict:
-        """
-        Save export file.
-
-        Args:
-            data: File data
-            filename: Desired filename
-            user_id: User ID (UUID)
-
-        Returns:
-            Dict with file info
-        """
+        """Save export file."""
         secure = secure_filename(filename)
         user_dir = self.exports / str(user_id)
-        user_dir.mkdir(exist_ok=True)
+        user_dir.mkdir(parents=True, exist_ok=True)
 
         path = user_dir / secure
         with open(path, "wb") as f:
@@ -129,6 +123,7 @@ class FileService:
     def save_temp(self, file: BinaryIO, filename: str) -> Dict:
         """Save temporary file."""
         secure = secure_filename(filename)
+        # Generate unique filename to avoid conflicts
         unique = f"temp_{uuid.uuid4().hex}_{secure}"
 
         path = self.temp / unique
@@ -140,6 +135,19 @@ class FileService:
             "path": str(path.relative_to(self.base)),
             "size": path.stat().st_size,
         }
+
+    def get_temp_path(self, filename: str) -> Optional[Path]:
+        """Get temporary file path."""
+        path = self.temp / filename
+        return path if path.exists() and path.is_file() else None
+
+    def delete_temp(self, filename: str) -> bool:
+        """Delete temporary file."""
+        path = self.get_temp_path(filename)
+        if path and path.exists():
+            path.unlink()
+            return True
+        return False
 
     def cleanup_temp(self, hours: int = 24) -> int:
         """Delete temp files older than hours."""

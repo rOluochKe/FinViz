@@ -2,6 +2,7 @@
 Custom decorators for the application.
 """
 
+import logging
 import time
 from functools import wraps
 from typing import Callable
@@ -10,8 +11,10 @@ from flask import current_app, jsonify, request
 from flask_jwt_extended import get_jwt, verify_jwt_in_request
 from marshmallow import ValidationError
 
-from app.extensions import limiter
+from app.extensions import cache, limiter
 from app.utils.constants import HTTP_STATUS
+
+logger = logging.getLogger(__name__)
 
 
 def admin_required(f: Callable) -> Callable:
@@ -376,3 +379,61 @@ def retry(max_attempts=3, delay=1, backoff=2, exceptions=(Exception,)):
         return decorated_function
 
     return decorator
+
+
+def safe_rate_limit(limit_string):
+    """
+    Decorator that safely handles rate limiting.
+    If rate limiter fails, it still allows the request.
+    """
+
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            try:
+                # Apply rate limiting
+                return limiter.limit(limit_string)(f)(*args, **kwargs)
+            except Exception as e:
+                # If rate limiter fails, log and proceed
+                current_app.logger.warning(f"Rate limiter failed: {str(e)}")
+                return f(*args, **kwargs)
+
+        return decorated_function
+
+    return decorator
+
+
+def safe_cache_cached(timeout=60, query_string=False):
+    """
+    Decorator that safely handles cache unavailability.
+    If Redis is not available, it skips caching and executes the function directly.
+    """
+
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            try:
+                if query_string:
+                    return cache.cached(timeout=timeout, query_string=True)(f)(
+                        *args, **kwargs
+                    )
+                else:
+                    return cache.cached(timeout=timeout)(f)(*args, **kwargs)
+            except Exception as e:
+                logger.debug(f"Cache unavailable, skipping cache: {str(e)}")
+                return f(*args, **kwargs)
+
+        return decorated_function
+
+    return decorator
+
+
+def safe_delete_memoized(func):
+    """
+    Safely delete memoized cache entries.
+    If Redis is not available, it silently continues.
+    """
+    try:
+        cache.delete_memoized(func)
+    except Exception as e:
+        logger.debug(f"Cache unavailable, cannot delete memoized: {str(e)}")

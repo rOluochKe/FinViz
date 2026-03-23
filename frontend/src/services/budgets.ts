@@ -21,38 +21,39 @@ class BudgetService {
     if (year) params.append('year', year.toString());
     if (month) params.append('month', month.toString());
 
-    const response = await api.get<{ budgets: Budget[] }>(`/budgets?${params.toString()}`);
-    return response.budgets || [];
+    // API returns array directly
+    const response = await api.get<Budget[]>(`/budgets?${params.toString()}`);
+    return response || [];
   }
 
   /**
    * Get a single budget by ID
    */
-  async getBudget(id: number): Promise<Budget> {
-    const response = await api.get<{ budget: Budget }>(`/budgets/${id}`);
-    return response.budget;
+  async getBudget(id: string): Promise<Budget> {
+    const response = await api.get<Budget>(`/budgets/${id}`);
+    return response;
   }
 
   /**
    * Create a new budget
    */
   async createBudget(data: BudgetCreate): Promise<Budget> {
-    const response = await api.post<{ budget: Budget }>('/budgets', data);
-    return response.budget;
+    const response = await api.post<Budget>('/budgets', data);
+    return response;
   }
 
   /**
    * Update an existing budget
    */
-  async updateBudget(id: number, data: BudgetUpdate): Promise<Budget> {
-    const response = await api.put<{ budget: Budget }>(`/budgets/${id}`, data);
-    return response.budget;
+  async updateBudget(id: string, data: BudgetUpdate): Promise<Budget> {
+    const response = await api.put<Budget>(`/budgets/${id}`, data);
+    return response;
   }
 
   /**
    * Delete a budget
    */
-  async deleteBudget(id: number): Promise<void> {
+  async deleteBudget(id: string): Promise<void> {
     await api.delete(`/budgets/${id}`);
   }
 
@@ -90,14 +91,14 @@ class BudgetService {
    * Get AI-powered budget suggestions
    */
   async getBudgetSuggestions(): Promise<BudgetSuggestion[]> {
-    const response = await api.get<{ suggestions: BudgetSuggestion[] }>('/budgets/suggestions');
-    return response.suggestions || [];
+    const response = await api.get<BudgetSuggestion[]>('/budgets/suggestions');
+    return response || [];
   }
 
   /**
    * Get detailed budget progress with projections
    */
-  async getBudgetProgress(id: number): Promise<{
+  async getBudgetProgress(id: string): Promise<{
     budget: Budget;
     period: {
       start: string;

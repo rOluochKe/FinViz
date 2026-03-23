@@ -3,7 +3,6 @@ Export routes with Flask-RESTX.
 """
 
 import uuid
-from datetime import datetime
 
 from flask import request, send_file
 from flask_jwt_extended import get_jwt_identity, jwt_required
@@ -190,6 +189,16 @@ class ExportTransactions(Resource):
     def get(self):
         """Export transactions to file"""
         user_id = get_jwt_identity()
+
+        # Convert user_id to UUID
+        if isinstance(user_id, str):
+            try:
+                user_uuid = uuid.UUID(user_id)
+            except ValueError:
+                exports_ns.abort(HTTP_STATUS.BAD_REQUEST, "Invalid user ID format")
+        else:
+            user_uuid = user_id
+
         export_format = request.args.get("format", "csv")
 
         if export_format not in ExportFormat.choices():
@@ -204,14 +213,14 @@ class ExportTransactions(Resource):
         category_id_param = request.args.get("category_id")
 
         # Build query
-        query = Transaction.query.filter_by(user_id=user_id)
+        query = Transaction.query.filter_by(user_id=user_uuid)
 
         if start:
             query = query.filter(Transaction.date >= start)
         if end:
             query = query.filter(Transaction.date <= end)
 
-        # Handle category_id - convert string to UUID
+        # Handle category_id - convert to UUID
         if category_id_param:
             try:
                 category_uuid = uuid.UUID(category_id_param)
@@ -244,7 +253,7 @@ class ExportTransactions(Resource):
 
         # Save for later download
         file_service = FileService()
-        file_service.save_export(file_data.getvalue(), filename, user_id)
+        file_service.save_export(file_data.getvalue(), filename, user_uuid)
 
         return send_file(
             file_data,

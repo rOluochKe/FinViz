@@ -2,15 +2,20 @@
 Dashboard service for aggregated dashboard data.
 """
 
+import logging
 import uuid
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 from typing import Dict, List
 
+from sqlalchemy.orm import joinedload
+
 from app.models.monthly_stats import MonthlyStat
 from app.models.transaction import Transaction
 from app.services.budget_service import BudgetService
 from app.services.notification_service import NotificationService
+
+logger = logging.getLogger(__name__)
 
 
 class DashboardService:
@@ -75,51 +80,117 @@ class DashboardService:
 
     @staticmethod
     def get_recent_transactions(user_id: uuid.UUID, limit: int = 10) -> List[Dict]:
-        """Get recent transactions."""
+        """Get recent transactions with category data."""
+        # Use explicit join to ensure category data is loaded
         tx = (
             Transaction.query.filter_by(user_id=user_id)
+            .options(joinedload(Transaction.category))
             .order_by(Transaction.date.desc())
             .limit(limit)
             .all()
         )
 
-        return [
-            {
-                "id": str(t.id),
-                "date": t.date.isoformat(),
-                "desc": t.description,
-                "amount": float(t.amount),
-                "type": t.type,
-                "category": t.category.name if t.category else None,
-                "color": t.category.color if t.category else None,
-            }
-            for t in tx
-        ]
+        result = []
+        for t in tx:
+            # Get category data
+            category_name = None
+            category_color = None
+
+            if t.category:
+                category_name = t.category.name
+                category_color = t.category.color
+            elif t.category_id:
+                # Try to load category if relationship not loaded
+                from app.models.category import Category
+
+                category = Category.query.get(t.category_id)
+                if category:
+                    category_name = category.name
+                    category_color = category.color
+                    # Cache for future use
+                    t.category = category
+
+            result.append(
+                {
+                    "id": str(t.id),
+                    "date": t.date.isoformat(),
+                    "desc": t.description,
+                    "amount": float(t.amount),
+                    "type": t.type,
+                    "category": category_name,
+                    "category_name": category_name,
+                    "color": category_color,
+                    "category_color": category_color,
+                }
+            )
+
+        return result
 
     @staticmethod
     def get_spending_by_category(user_id: uuid.UUID, days: int = 30) -> List[Dict]:
-        """Get spending breakdown by category."""
+        """Get spending breakdown by category with proper category names."""
         end = date.today()
         start = end - timedelta(days=days)
 
-        tx = Transaction.query.filter(
-            Transaction.user_id == user_id,
-            Transaction.date >= start,
-            Transaction.type == "expense",
-        ).all()
+        # Use explicit join to ensure category data is loaded
+        tx = (
+            Transaction.query.filter(
+                Transaction.user_id == user_id,
+                Transaction.date >= start,
+                Transaction.type == "expense",
+            )
+            .options(joinedload(Transaction.category))
+            .all()
+        )
 
         cats = defaultdict(float)
         for t in tx:
             if t.category:
                 cats[t.category.name] += float(t.amount)
+            elif t.category_id:
+                from app.models.category import Category
+
+                category = Category.query.get(t.category_id)
+                if category:
+                    cats[category.name] += float(t.amount)
+                else:
+                    cats["Uncategorized"] += float(t.amount)
+            else:
+                cats["Uncategorized"] += float(t.amount)
 
         total = sum(cats.values())
+
+        # Define category colors
+        color_map = {
+            "Groceries": "#dc3545",
+            "Rent": "#fd7e14",
+            "Utilities": "#6c757d",
+            "Entertainment": "#e83e8c",
+            "Transportation": "#20c997",
+            "Healthcare": "#007bff",
+            "Dining Out": "#6610f2",
+            "Shopping": "#d63384",
+            "Salary": "#28a745",
+            "Freelance": "#17a2b8",
+            "Investment": "#ffc107",
+            "Gifts": "#e83e8c",
+            "Transfer": "#6f42c1",
+            "Credit Card Payment": "#dc3545",
+            "Education": "#0dcaf0",
+            "Insurance": "#198754",
+            "Subscriptions": "#6f42c1",
+            "Travel": "#0d6efd",
+            "Pets": "#e83e8c",
+            "Gym": "#20c997",
+            "Uncategorized": "#808080",
+        }
 
         return [
             {
                 "category": k,
                 "amount": v,
                 "percent": (v / total * 100) if total > 0 else 0,
+                "color": color_map.get(k, "#808080"),
             }
             for k, v in sorted(cats.items(), key=lambda x: x[1], reverse=True)
         ]
@@ -145,14 +216,21 @@ class DashboardService:
                 data.append(
                     {
                         "month": f"{y}-{m:02d}",
+                        "date": f"{y}-{m:02d}",
                         "income": float(stats.total_income),
                         "expense": float(stats.total_expense),
-                        "savings": float(stats.net_savings) if stats.net_savings else 0,
+                        "net": float(stats.net_savings) if stats.net_savings else 0,
                     }
                 )
             else:
                 data.append(
-                    {"month": f"{y}-{m:02d}", "income": 0, "expense": 0, "savings": 0}
+                    {
+                        "month": f"{y}-{m:02d}",
+                        "date": f"{y}-{m:02d}",
+                        "income": 0,
+                        "expense": 0,
+                        "net": 0,
+                    }
                 )
 
         return {"trends": list(reversed(data))}
@@ -185,7 +263,7 @@ class DashboardService:
 
         # Check budget alerts
         budget_status = BudgetService.get_budget_status(user_id)
-        if budget_status["alerts"]:
+        if budget_status.get("alerts"):
             insights.append(
                 {
                     "type": "warning",
@@ -214,7 +292,7 @@ class DashboardService:
         """Get complete dashboard data."""
         return {
             "kpis": DashboardService.get_kpis(user_id, days),
-            "recent": DashboardService.get_recent_transactions(user_id),
+            "recent": DashboardService.get_recent_transactions(user_id, 5),
             "spending_by_category": DashboardService.get_spending_by_category(
                 user_id, days
             ),

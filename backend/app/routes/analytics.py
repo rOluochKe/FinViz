@@ -2,59 +2,21 @@
 Analytics routes with Flask-RESTX.
 """
 
-import logging
 import uuid
 from collections import defaultdict
 from datetime import datetime, timedelta
-from functools import wraps
 
 from flask import request
 from flask_jwt_extended import get_jwt_identity, jwt_required
 from flask_restx import Namespace, Resource, fields
 
-from app.extensions import cache
 from app.models.transaction import Transaction
 from app.services.analytics_service import AnalyticsService
 from app.services.report_service import ReportService
+from app.utils.decorators import safe_cache_cached
 
 # Create namespace
 analytics_ns = Namespace("analytics", description="Analytics operations")
-
-logger = logging.getLogger(__name__)
-
-# ============================================================================
-# Helper Decorator for Safe Caching
-# ============================================================================
-
-
-def safe_cache_cached(timeout=300, query_string=False):
-    """
-    Decorator that safely handles cache unavailability.
-    If Redis is not available, it skips caching and executes the function directly.
-
-    Args:
-        timeout: Cache timeout in seconds
-        query_string: Whether to include query string in cache key
-    """
-
-    def decorator(f):
-        @wraps(f)
-        def decorated_function(*args, **kwargs):
-            try:
-                # Try to use cache if available
-                if query_string:
-                    return cache.cached(timeout=timeout, query_string=True)(f)(
-                        *args, **kwargs
-                    )
-                else:
-                    return cache.cached(timeout=timeout)(f)(*args, **kwargs)
-            except Exception as e:
-                logger.debug(f"Cache unavailable, skipping cache: {str(e)}")
-                return f(*args, **kwargs)
-
-        return decorated_function
-
-    return decorator
 
 
 # ============================================================================

@@ -228,7 +228,7 @@ class CacheStats(Resource):
             }
 
         except Exception as e:
-            current_app.logger.error(f"Error getting cache stats: {str(e)}")
+            # current_app.logger.error(f"Error getting cache stats: {str(e)}")
             return {
                 "backend": "RedisCache",
                 "available": False,
@@ -267,7 +267,6 @@ class CacheStats(Resource):
             cache.clear()
             return {"message": "Cache cleared successfully"}
         except Exception as e:
-            current_app.logger.error(f"Error clearing cache: {str(e)}")
             # Return a friendly message even if Redis is unavailable
             return {
                 "message": "Cache not available (Redis not connected)"
@@ -386,7 +385,6 @@ class Logs(Resource):
                 "showing": len(last_lines),
             }
         except Exception as e:
-            current_app.logger.error(f"Error reading log file: {str(e)}")
             return {"logs": [], "total": 0, "showing": 0, "error": str(e)}
 
 

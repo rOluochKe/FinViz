@@ -45,40 +45,40 @@ class UsersService {
   /**
    * Get a single user by ID (admin only)
    */
-  async getUser(id: number): Promise<User> {
-    const response = await api.get<{ user: User }>(`/users/${id}`);
-    return response.user;
+  async getUser(id: string): Promise<User> {
+    const response = await api.get<User>(`/users/${id}`);
+    return response;
   }
 
   /**
    * Update a user (admin only)
    */
-  async updateUser(id: number, data: UserUpdateData): Promise<User> {
-    const response = await api.put<{ user: User }>(`/users/${id}`, data);
-    return response.user;
+  async updateUser(id: string, data: UserUpdateData): Promise<User> {
+    const response = await api.put<User>(`/users/${id}`, data);
+    return response;
   }
 
   /**
    * Delete a user (admin only)
    */
-  async deleteUser(id: number): Promise<void> {
+  async deleteUser(id: string): Promise<void> {
     await api.delete(`/users/${id}`);
   }
 
   /**
    * Activate a user account (admin only)
    */
-  async activateUser(id: number): Promise<User> {
-    const response = await api.post<{ user: User }>(`/users/${id}/activate`);
-    return response.user;
+  async activateUser(id: string): Promise<User> {
+    const response = await api.post<User>(`/users/${id}/activate`);
+    return response;
   }
 
   /**
    * Deactivate a user account (admin only)
    */
-  async deactivateUser(id: number): Promise<User> {
-    const response = await api.post<{ user: User }>(`/users/${id}/deactivate`);
-    return response.user;
+  async deactivateUser(id: string): Promise<User> {
+    const response = await api.post<User>(`/users/${id}/deactivate`);
+    return response;
   }
 }
 

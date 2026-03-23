@@ -135,6 +135,7 @@ class User(db.Model):
                 "email": self.email,
                 "role": self.role,
                 "is_admin": self.is_admin,
+                "user_id": str(self.id),
             },
             fresh=True,
         )
@@ -143,11 +144,13 @@ class User(db.Model):
             identity=str(self.id), additional_claims={"type": "refresh"}
         )
 
-        # Get expires_in as integer (seconds)
         expires_in = current_app.config.get("JWT_ACCESS_TOKEN_EXPIRES", 3600)
-        # If it's a timedelta, convert to seconds
         if hasattr(expires_in, "total_seconds"):
             expires_in = int(expires_in.total_seconds())
+        elif isinstance(expires_in, (int, float)):
+            expires_in = int(expires_in)
+        else:
+            expires_in = 3600
 
         return {
             "access_token": access_token,
