@@ -2,8 +2,8 @@
 Category routes with Flask-RESTX.
 """
 
-import uuid
 import logging
+import uuid
 from datetime import datetime, timedelta
 from functools import wraps
 
@@ -27,49 +27,59 @@ logger = logging.getLogger(__name__)
 # Helper Decorator for Safe Caching
 # ============================================================================
 
+
 def safe_cache_cached(timeout=300, query_string=False):
     """
     Decorator that safely handles cache unavailability.
     """
+
     def decorator(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
             try:
                 if query_string:
-                    return cache.cached(timeout=timeout, query_string=True)(f)(*args, **kwargs)
+                    return cache.cached(timeout=timeout, query_string=True)(f)(
+                        *args, **kwargs
+                    )
                 else:
                     return cache.cached(timeout=timeout)(f)(*args, **kwargs)
             except Exception as e:
                 logger.debug(f"Cache unavailable, skipping cache: {str(e)}")
                 return f(*args, **kwargs)
+
         return decorated_function
+
     return decorator
+
 
 # ============================================================================
 # Custom DateTime Field for Marshalling
 # ============================================================================
 
+
 class CustomDateTime(fields.DateTime):
     """
     Custom DateTime field that handles both ISO format and space-separated format.
     """
+
     def __init__(self, *args, **kwargs):
-        kwargs['format'] = 'iso'
+        kwargs["format"] = "iso"
         super().__init__(*args, **kwargs)
 
     def _serialize(self, value, attr, obj, **kwargs):
         """Convert datetime to string in ISO format."""
         if value is None:
             return None
-        
+
         if isinstance(value, datetime):
             return value.isoformat()
-        
+
         # If it's already a string, convert space to T for ISO format
         if isinstance(value, str):
-            return value.replace(' ', 'T')
-        
+            return value.replace(" ", "T")
+
         return str(value)
+
 
 # ============================================================================
 # Model Definitions
@@ -175,6 +185,7 @@ category_filter_model = categories_ns.model(
 # API Endpoints
 # ============================================================================
 
+
 @categories_ns.route("/defaults")
 class CategoryDefaults(Resource):
     @categories_ns.doc(
@@ -191,7 +202,7 @@ class CategoryDefaults(Resource):
         """Create default categories"""
         user_id = get_jwt_identity()
         created = []
-        
+
         # Ensure user_id is a UUID object
         try:
             if isinstance(user_id, str):
@@ -200,20 +211,21 @@ class CategoryDefaults(Resource):
                 user_uuid = user_id
         except (ValueError, TypeError) as e:
             logger.error(f"Invalid user ID format: {user_id}")
-            categories_ns.abort(HTTP_STATUS.BAD_REQUEST, f"Invalid user ID format: {user_id}")
+            categories_ns.abort(
+                HTTP_STATUS.BAD_REQUEST, f"Invalid user ID format: {user_id}"
+            )
 
         # Process each default category
         for cat_data in DEFAULT_CATEGORIES:
             try:
                 # Skip if category already exists
                 existing = Category.query.filter_by(
-                    name=cat_data["name"], 
-                    user_id=user_uuid
+                    name=cat_data["name"], user_id=user_uuid
                 ).first()
-                
+
                 if existing:
                     continue
-                
+
                 # Create the category with explicit None for parent_id
                 category = Category(
                     user_id=user_uuid,
@@ -225,38 +237,38 @@ class CategoryDefaults(Resource):
                     parent_id=None,  # Explicitly set to None
                     is_system=False,
                     is_active=True,
-                    meta_data={}
+                    meta_data={},
                 )
-                
+
                 db.session.add(category)
                 created.append(cat_data["name"])
-                
+
             except Exception as e:
                 logger.error(f"Error creating category {cat_data['name']}: {str(e)}")
                 # Rollback this specific category if there was an error
                 db.session.rollback()
                 # Continue with other categories
                 continue
-        
+
         # Commit all changes at once
         if created:
             try:
                 db.session.commit()
                 return {
                     "message": f"Successfully created {len(created)} default categories",
-                    "categories": created
+                    "categories": created,
                 }, HTTP_STATUS.CREATED
             except Exception as e:
                 db.session.rollback()
                 logger.error(f"Error committing categories: {str(e)}")
                 categories_ns.abort(
                     HTTP_STATUS.INTERNAL_SERVER_ERROR,
-                    f"Failed to create categories: {str(e)}"
+                    f"Failed to create categories: {str(e)}",
                 )
         else:
             return {
                 "message": "All default categories already exist",
-                "categories": []
+                "categories": [],
             }, HTTP_STATUS.OK
 
 
@@ -297,7 +309,7 @@ class CategoryHierarchy(Resource):
                 roots.append(build_tree(cat))
 
         return {"categories": roots}
-    
+
 
 @categories_ns.route("/stats")
 class CategoryStats(Resource):
@@ -349,7 +361,10 @@ class CategoryList(Resource):
     @categories_ns.doc(
         description="Get all categories for current user",
         security="Bearer Auth",
-        responses={HTTP_STATUS.OK: "List of categories retrieved", HTTP_STATUS.UNAUTHORIZED: "Authentication required"},
+        responses={
+            HTTP_STATUS.OK: "List of categories retrieved",
+            HTTP_STATUS.UNAUTHORIZED: "Authentication required",
+        },
     )
     @categories_ns.param("type", "Filter by category type (income/expense/transfer)")
     @categories_ns.param(
@@ -397,8 +412,11 @@ class CategoryList(Resource):
         """Create a new category"""
         # Check Content-Type header
         if not request.is_json:
-            categories_ns.abort(HTTP_STATUS.UNSUPPORTED_MEDIA_TYPE, "Content-Type must be application/json")
-        
+            categories_ns.abort(
+                HTTP_STATUS.UNSUPPORTED_MEDIA_TYPE,
+                "Content-Type must be application/json",
+            )
+
         user_id = get_jwt_identity()
         data = request.json
 
@@ -406,7 +424,9 @@ class CategoryList(Resource):
         required_fields = ["name", "type"]
         for field in required_fields:
             if field not in data:
-                categories_ns.abort(HTTP_STATUS.BAD_REQUEST, f"Missing required field: {field}")
+                categories_ns.abort(
+                    HTTP_STATUS.BAD_REQUEST, f"Missing required field: {field}"
+                )
 
         # Check for existing
         existing = Category.query.filter_by(user_id=user_id, name=data["name"]).first()
@@ -423,9 +443,13 @@ class CategoryList(Resource):
                 # Verify parent exists
                 parent = Category.query.get(parent_uuid)
                 if not parent:
-                    categories_ns.abort(HTTP_STATUS.BAD_REQUEST, "Parent category not found")
+                    categories_ns.abort(
+                        HTTP_STATUS.BAD_REQUEST, "Parent category not found"
+                    )
                 if parent.type != data["type"]:
-                    categories_ns.abort(HTTP_STATUS.BAD_REQUEST, "Parent category type must match")
+                    categories_ns.abort(
+                        HTTP_STATUS.BAD_REQUEST, "Parent category type must match"
+                    )
             except ValueError:
                 categories_ns.abort(HTTP_STATUS.BAD_REQUEST, "Invalid parent_id format")
 
@@ -441,12 +465,13 @@ class CategoryList(Resource):
             "is_system": False,
             "is_active": True,
         }
-        
+
         category = Category(**category_data)
         db.session.add(category)
         db.session.commit()
 
         return CategorySchema().dump(category), HTTP_STATUS.CREATED
+
 
 @categories_ns.route("/<string:category_id>")
 @categories_ns.param("category_id", "Category ID (UUID)")
@@ -502,8 +527,11 @@ class CategoryDetail(Resource):
         """Update a category"""
         # Check Content-Type header
         if not request.is_json:
-            categories_ns.abort(HTTP_STATUS.UNSUPPORTED_MEDIA_TYPE, "Content-Type must be application/json")
-        
+            categories_ns.abort(
+                HTTP_STATUS.UNSUPPORTED_MEDIA_TYPE,
+                "Content-Type must be application/json",
+            )
+
         user_id = get_jwt_identity()
         data = request.json
 

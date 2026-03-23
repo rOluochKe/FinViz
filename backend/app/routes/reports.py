@@ -2,8 +2,8 @@
 Report routes with Flask-RESTX.
 """
 
-import uuid
 import logging
+import uuid
 from datetime import datetime
 from functools import wraps
 
@@ -25,11 +25,13 @@ logger = logging.getLogger(__name__)
 # Helper Decorator for Safe Caching
 # ============================================================================
 
+
 def safe_cache_cached(timeout=300):
     """
     Decorator that safely handles cache unavailability.
     If Redis is not available, it skips caching and executes the function directly.
     """
+
     def decorator(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
@@ -39,8 +41,11 @@ def safe_cache_cached(timeout=300):
             except Exception as e:
                 logger.debug(f"Cache unavailable, skipping cache: {str(e)}")
                 return f(*args, **kwargs)
+
         return decorated_function
+
     return decorator
+
 
 # ============================================================================
 # Model Definitions
@@ -268,7 +273,10 @@ class CategoryReport(Resource):
         try:
             category_uuid = uuid.UUID(category_id)
         except ValueError:
-            reports_ns.abort(HTTP_STATUS.BAD_REQUEST, "Invalid category ID format. Must be a valid UUID.")
+            reports_ns.abort(
+                HTTP_STATUS.BAD_REQUEST,
+                "Invalid category ID format. Must be a valid UUID.",
+            )
 
         report = ReportService.category_report(user_id, category_uuid, months)
 
@@ -475,7 +483,7 @@ class YearSummary(Resource):
         responses={200: "Summary retrieved"},
     )
     @jwt_required()
-    @safe_cache_cached(timeout=300) 
+    @safe_cache_cached(timeout=300)
     def get(self, year):
         """Get year summary"""
         user_id = get_jwt_identity()

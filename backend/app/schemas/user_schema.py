@@ -2,9 +2,10 @@
 User schemas for serialization and validation.
 """
 
+from datetime import datetime
+
 from marshmallow import Schema, ValidationError, fields, post_load, validate
 from marshmallow_sqlalchemy import SQLAlchemyAutoSchema
-from datetime import datetime
 
 from app.models.user import User
 from app.utils.validators import validate_password_strength
@@ -14,30 +15,30 @@ class CustomDateTimeField(fields.DateTime):
     """
     Custom DateTime field that handles both ISO format and space-separated format.
     """
-    
+
     def _serialize(self, value, attr, obj, **kwargs):
         """Convert datetime to string in ISO format."""
         if value is None:
             return None
-        
+
         if isinstance(value, datetime):
             return value.isoformat()
-        
+
         # If it's already a string, convert space to T for ISO format
         if isinstance(value, str):
-            return value.replace(' ', 'T')
-        
+            return value.replace(" ", "T")
+
         return str(value)
-    
+
     def _deserialize(self, value, attr, data, **kwargs):
         """Parse datetime string, handling both formats."""
         if value is None:
             return None
-        
+
         if isinstance(value, str):
             # Replace space with T for ISO format
-            value = value.replace(' ', 'T')
-        
+            value = value.replace(" ", "T")
+
         return super()._deserialize(value, attr, data, **kwargs)
 
 
@@ -75,7 +76,7 @@ class UserSchema(SQLAlchemyAutoSchema):
     status = fields.String(dump_only=True)
     preferences = fields.Dict()
     email_verified = fields.Boolean(dump_only=True)
-    
+
     # Use custom datetime field to handle both formats
     created_at = CustomDateTimeField(dump_only=True, format="iso")
     last_login = CustomDateTimeField(dump_only=True, format="iso", allow_none=True)

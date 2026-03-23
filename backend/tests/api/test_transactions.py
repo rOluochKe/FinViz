@@ -2,6 +2,7 @@
 API tests for transaction endpoints.
 """
 
+import uuid
 from datetime import datetime
 
 from app.models.category import Category
@@ -56,9 +57,10 @@ def test_get_single_transaction(client, auth_headers, test_transactions):
     data = response.get_json()
     # Check the actual structure of your API response
     if "transaction" in data:
-        assert data["transaction"]["id"] == transaction_id
+        assert str(data["transaction"]["id"]) == str(transaction_id)
     else:
-        assert data["id"] == transaction_id
+        # Convert both to string for comparison
+        assert str(data["id"]) == str(transaction_id)
 
 
 def test_create_transaction(
@@ -82,7 +84,7 @@ def test_create_transaction(
                     type=cat_data["type"],
                     color=cat_data["color"],
                     icon=cat_data["icon"],
-                    user_id=test_user.id,  # Use the actual test user ID
+                    user_id=test_user.id,
                     is_system=False,
                 )
                 db_session.add(expense_category)
@@ -96,7 +98,7 @@ def test_create_transaction(
         "/api/transactions",
         headers=auth_headers,
         json={
-            "category_id": expense_category.id,
+            "category_id": str(expense_category.id),
             "amount": 50.00,
             "description": "Test transaction",
             "date": datetime.now().date().isoformat(),
@@ -163,7 +165,7 @@ def test_bulk_create_transactions(
                     type=cat_data["type"],
                     color=cat_data["color"],
                     icon=cat_data["icon"],
-                    user_id=test_user.id,  # Use the actual test user ID
+                    user_id=test_user.id,
                     is_system=False,
                 )
                 db_session.add(expense_category)
@@ -184,7 +186,7 @@ def test_bulk_create_transactions(
                     type=cat_data["type"],
                     color=cat_data["color"],
                     icon=cat_data["icon"],
-                    user_id=test_user.id,  # Use the actual test user ID
+                    user_id=test_user.id,
                     is_system=False,
                 )
                 db_session.add(income_category)
@@ -207,14 +209,14 @@ def test_bulk_create_transactions(
         json={
             "transactions": [
                 {
-                    "category_id": expense_category.id,
+                    "category_id": str(expense_category.id),
                     "amount": 50.00,
                     "description": "Bulk expense",
                     "date": datetime.now().date().isoformat(),
                     "type": "expense",
                 },
                 {
-                    "category_id": income_category.id,
+                    "category_id": str(income_category.id),
                     "amount": 1000.00,
                     "description": "Bulk income",
                     "date": datetime.now().date().isoformat(),

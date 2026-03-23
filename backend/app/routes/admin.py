@@ -49,8 +49,12 @@ cache_stats_model = admin_ns.model(
             description="Cache backend type", example="RedisCache"
         ),
         "hits": fields.Integer(description="Cache hits", example=1500, allow_null=True),
-        "misses": fields.Integer(description="Cache misses", example=200, allow_null=True),
-        "memory": fields.String(description="Memory usage", example="2.5M", allow_null=True),
+        "misses": fields.Integer(
+            description="Cache misses", example=200, allow_null=True
+        ),
+        "memory": fields.String(
+            description="Memory usage", example="2.5M", allow_null=True
+        ),
         "keys": fields.Integer(description="Total keys", example=350, allow_null=True),
         "available": fields.Boolean(description="Is cache available", example=True),
         "error": fields.String(description="Error message if any", allow_null=True),
@@ -187,7 +191,7 @@ class CacheStats(Resource):
         try:
             # Try to get cache stats from Redis
             stats = CacheService.get_stats()
-            
+
             # Check if stats contains error
             if stats and stats.get("error"):
                 return {
@@ -199,7 +203,7 @@ class CacheStats(Resource):
                     "memory": None,
                     "keys": None,
                 }
-            
+
             # If stats is None or empty, return fallback
             if not stats:
                 return {
@@ -211,7 +215,7 @@ class CacheStats(Resource):
                     "memory": None,
                     "keys": None,
                 }
-            
+
             # Return the stats with proper values
             return {
                 "backend": stats.get("backend", "RedisCache"),
@@ -222,7 +226,7 @@ class CacheStats(Resource):
                 "keys": stats.get("keys", 0),
                 "error": None,
             }
-            
+
         except Exception as e:
             current_app.logger.error(f"Error getting cache stats: {str(e)}")
             return {
@@ -265,7 +269,9 @@ class CacheStats(Resource):
         except Exception as e:
             current_app.logger.error(f"Error clearing cache: {str(e)}")
             # Return a friendly message even if Redis is unavailable
-            return {"message": "Cache not available (Redis not connected)"}, HTTP_STATUS.OK
+            return {
+                "message": "Cache not available (Redis not connected)"
+            }, HTTP_STATUS.OK
 
 
 @admin_ns.route("/storage")
@@ -374,7 +380,11 @@ class Logs(Resource):
                 all_lines = f.readlines()
                 last_lines = all_lines[-lines:]
 
-            return {"logs": last_lines, "total": len(all_lines), "showing": len(last_lines)}
+            return {
+                "logs": last_lines,
+                "total": len(all_lines),
+                "showing": len(last_lines),
+            }
         except Exception as e:
             current_app.logger.error(f"Error reading log file: {str(e)}")
             return {"logs": [], "total": 0, "showing": 0, "error": str(e)}
@@ -505,8 +515,8 @@ class SystemHealth(Resource):
             status["components"]["cache"] = {"status": "healthy"}
         except Exception as e:
             status["components"]["cache"] = {
-                "status": "unavailable", 
-                "error": "Redis not available - caching disabled"
+                "status": "unavailable",
+                "error": "Redis not available - caching disabled",
             }
             # Don't degrade overall status for cache failure
 

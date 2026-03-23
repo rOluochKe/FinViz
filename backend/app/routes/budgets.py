@@ -2,8 +2,8 @@
 Budget routes with Flask-RESTX.
 """
 
-import uuid
 import logging
+import uuid
 from datetime import datetime
 from functools import wraps
 
@@ -27,24 +27,31 @@ logger = logging.getLogger(__name__)
 # Helper Decorator for Safe Caching
 # ============================================================================
 
+
 def safe_cache_cached(timeout=60, query_string=False):
     """
     Decorator that safely handles cache unavailability.
     If Redis is not available, it skips caching and executes the function directly.
     """
+
     def decorator(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
             try:
                 if query_string:
-                    return cache.cached(timeout=timeout, query_string=True)(f)(*args, **kwargs)
+                    return cache.cached(timeout=timeout, query_string=True)(f)(
+                        *args, **kwargs
+                    )
                 else:
                     return cache.cached(timeout=timeout)(f)(*args, **kwargs)
             except Exception as e:
                 logger.debug(f"Cache unavailable, skipping cache: {str(e)}")
                 return f(*args, **kwargs)
+
         return decorated_function
+
     return decorator
+
 
 # ============================================================================
 # Model Definitions
@@ -272,9 +279,9 @@ class BudgetList(Resource):
         if not request.is_json:
             budgets_ns.abort(
                 HTTP_STATUS.UNSUPPORTED_MEDIA_TYPE,
-                "Content-Type must be application/json"
+                "Content-Type must be application/json",
             )
-        
+
         user_id = get_jwt_identity()
         data = request.json
 
@@ -282,13 +289,18 @@ class BudgetList(Resource):
         required_fields = ["category_id", "amount", "period", "year"]
         for field in required_fields:
             if field not in data:
-                budgets_ns.abort(HTTP_STATUS.BAD_REQUEST, f"Missing required field: {field}")
+                budgets_ns.abort(
+                    HTTP_STATUS.BAD_REQUEST, f"Missing required field: {field}"
+                )
 
         # Validate category_id format
         try:
             category_uuid = uuid.UUID(data["category_id"])
         except ValueError:
-            budgets_ns.abort(HTTP_STATUS.BAD_REQUEST, "Invalid category_id format. Must be a valid UUID.")
+            budgets_ns.abort(
+                HTTP_STATUS.BAD_REQUEST,
+                "Invalid category_id format. Must be a valid UUID.",
+            )
 
         # Check category
         category = Category.query.get(category_uuid)
@@ -318,9 +330,9 @@ class BudgetList(Resource):
             alert_threshold=data.get("alert_threshold", 80.0),
             is_active=data.get("is_active", True),
             rollover=data.get("rollover", False),
-            notes=data.get("notes")
+            notes=data.get("notes"),
         )
-        
+
         db.session.add(budget)
         db.session.commit()
 
@@ -376,9 +388,9 @@ class BudgetDetail(Resource):
         if not request.is_json:
             budgets_ns.abort(
                 HTTP_STATUS.UNSUPPORTED_MEDIA_TYPE,
-                "Content-Type must be application/json"
+                "Content-Type must be application/json",
             )
-        
+
         user_id = get_jwt_identity()
         data = request.json
 

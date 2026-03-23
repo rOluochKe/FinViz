@@ -2,8 +2,8 @@
 Dashboard routes with Flask-RESTX.
 """
 
-import uuid
 import logging
+import uuid
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 from functools import wraps
@@ -149,11 +149,13 @@ net_worth_model = dashboard_ns.model(
 # Helper Decorator
 # ============================================================================
 
+
 def safe_cache_cached(timeout=60):
     """
     Decorator that safely handles cache unavailability.
     If Redis is not available, it skips caching and executes the function directly.
     """
+
     def decorator(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
@@ -165,8 +167,11 @@ def safe_cache_cached(timeout=60):
                 # Log the error at debug level to avoid noise
                 logging.getLogger(__name__).debug(f"Cache unavailable: {str(e)}")
                 return f(*args, **kwargs)
+
         return decorated_function
+
     return decorator
+
 
 # ============================================================================
 # API Endpoints

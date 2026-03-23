@@ -5,8 +5,8 @@ Import routes with Flask-RESTX.
 import csv
 import io
 import logging
-from pathlib import Path
 from functools import wraps
+from pathlib import Path
 
 from flask import request
 from flask_jwt_extended import get_jwt_identity, jwt_required
@@ -27,22 +27,28 @@ logger = logging.getLogger(__name__)
 # Helper Decorators
 # ============================================================================
 
+
 def safe_cache_cached(timeout=60):
     """
     Decorator that safely handles cache unavailability.
     If Redis is not available, it skips caching and executes the function directly.
     """
+
     def decorator(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
             try:
                 from app.extensions import cache
+
                 return cache.cached(timeout=timeout)(f)(*args, **kwargs)
             except Exception as e:
                 logger.debug(f"Cache unavailable, skipping cache: {str(e)}")
                 return f(*args, **kwargs)
+
         return decorated_function
+
     return decorator
+
 
 # ============================================================================
 # Model Definitions
@@ -215,10 +221,12 @@ class UploadFile(Resource):
             file_info = FileService().save_temp(file, file.filename)
 
             return {"message": "File uploaded", "file": file_info}
-            
+
         except Exception as e:
             logger.error(f"Upload error: {str(e)}")
-            imports_ns.abort(HTTP_STATUS.INTERNAL_SERVER_ERROR, f"Upload failed: {str(e)}")
+            imports_ns.abort(
+                HTTP_STATUS.INTERNAL_SERVER_ERROR, f"Upload failed: {str(e)}"
+            )
 
 
 @imports_ns.route("/preview")
@@ -288,10 +296,12 @@ class PreviewImport(Resource):
             results = ImportService.import_transactions(records, user_id, dry_run=True)
 
             return results
-            
+
         except Exception as e:
             logger.error(f"Preview error: {str(e)}")
-            imports_ns.abort(HTTP_STATUS.INTERNAL_SERVER_ERROR, f"Preview failed: {str(e)}")
+            imports_ns.abort(
+                HTTP_STATUS.INTERNAL_SERVER_ERROR, f"Preview failed: {str(e)}"
+            )
 
 
 @imports_ns.route("/execute")
@@ -370,10 +380,12 @@ class ExecuteImport(Resource):
                 "message": f"Imported {results['success']} transactions",
                 "results": results,
             }
-            
+
         except Exception as e:
             logger.error(f"Execute import error: {str(e)}")
-            imports_ns.abort(HTTP_STATUS.INTERNAL_SERVER_ERROR, f"Import failed: {str(e)}")
+            imports_ns.abort(
+                HTTP_STATUS.INTERNAL_SERVER_ERROR, f"Import failed: {str(e)}"
+            )
 
 
 @imports_ns.route("/template")
@@ -411,10 +423,13 @@ class GetTemplate(Resource):
                 return {"template": output.getvalue(), "format": "csv"}
             else:
                 return {"template": template, "format": "json"}
-                
+
         except Exception as e:
             logger.error(f"Template generation error: {str(e)}")
-            imports_ns.abort(HTTP_STATUS.INTERNAL_SERVER_ERROR, f"Template generation failed: {str(e)}")
+            imports_ns.abort(
+                HTTP_STATUS.INTERNAL_SERVER_ERROR,
+                f"Template generation failed: {str(e)}",
+            )
 
 
 @imports_ns.route("/supported-formats")
@@ -496,10 +511,12 @@ class ValidateFile(Resource):
                 "extension": filename.split(".")[-1] if "." in filename else "",
                 "message": "File format is valid",
             }
-            
+
         except Exception as e:
             logger.error(f"Validation error: {str(e)}")
-            imports_ns.abort(HTTP_STATUS.INTERNAL_SERVER_ERROR, f"Validation failed: {str(e)}")
+            imports_ns.abort(
+                HTTP_STATUS.INTERNAL_SERVER_ERROR, f"Validation failed: {str(e)}"
+            )
 
 
 @imports_ns.route("/clear-temp")
@@ -517,7 +534,10 @@ class ClearTemp(Resource):
             deleted = file_service.cleanup_temp(hours=0)  # Clear all temp files
 
             return {"message": f"Cleared {deleted} temporary files", "count": deleted}
-            
+
         except Exception as e:
             logger.error(f"Clear temp error: {str(e)}")
-            imports_ns.abort(HTTP_STATUS.INTERNAL_SERVER_ERROR, f"Failed to clear temp files: {str(e)}")
+            imports_ns.abort(
+                HTTP_STATUS.INTERNAL_SERVER_ERROR,
+                f"Failed to clear temp files: {str(e)}",
+            )

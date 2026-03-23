@@ -3,9 +3,9 @@ Cache service for Redis caching operations.
 """
 
 import hashlib
+import uuid
 from functools import wraps
 from typing import Any, Callable, Dict
-import uuid
 
 from flask import request
 from flask_jwt_extended import get_jwt_identity

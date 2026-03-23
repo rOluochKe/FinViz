@@ -210,7 +210,7 @@ class ExportTransactions(Resource):
             query = query.filter(Transaction.date >= start)
         if end:
             query = query.filter(Transaction.date <= end)
-        
+
         # Handle category_id - convert string to UUID
         if category_id_param:
             try:
@@ -218,8 +218,8 @@ class ExportTransactions(Resource):
                 query = query.filter_by(category_id=category_uuid)
             except ValueError:
                 exports_ns.abort(
-                    HTTP_STATUS.BAD_REQUEST, 
-                    f"Invalid category_id format: {category_id_param}. Must be a valid UUID."
+                    HTTP_STATUS.BAD_REQUEST,
+                    f"Invalid category_id format: {category_id_param}. Must be a valid UUID.",
                 )
 
         transactions = query.order_by(Transaction.date.desc()).all()
@@ -403,7 +403,7 @@ class ExportCustomReport(Resource):
                 query = query.filter(Transaction.date >= filters["start_date"])
             if filters.get("end_date"):
                 query = query.filter(Transaction.date <= filters["end_date"])
-            
+
             # Handle category_id - convert string to UUID
             if filters.get("category_id"):
                 try:
@@ -412,7 +412,7 @@ class ExportCustomReport(Resource):
                 except ValueError:
                     exports_ns.abort(
                         HTTP_STATUS.BAD_REQUEST,
-                        f"Invalid category_id format: {filters['category_id']}. Must be a valid UUID."
+                        f"Invalid category_id format: {filters['category_id']}. Must be a valid UUID.",
                     )
 
             items = query.all()

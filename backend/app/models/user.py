@@ -143,13 +143,17 @@ class User(db.Model):
             identity=str(self.id), additional_claims={"type": "refresh"}
         )
 
+        # Get expires_in as integer (seconds)
+        expires_in = current_app.config.get("JWT_ACCESS_TOKEN_EXPIRES", 3600)
+        # If it's a timedelta, convert to seconds
+        if hasattr(expires_in, "total_seconds"):
+            expires_in = int(expires_in.total_seconds())
+
         return {
             "access_token": access_token,
             "refresh_token": refresh_token,
             "token_type": "bearer",
-            "expires_in": current_app.config[
-                "JWT_ACCESS_TOKEN_EXPIRES"
-            ].total_seconds(),
+            "expires_in": expires_in,
         }
 
     def generate_verification_token(self):

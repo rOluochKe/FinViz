@@ -28,10 +28,10 @@ class Category(db.Model):
 
     # Hierarchy support
     parent_id = db.Column(
-        UUID(as_uuid=True), 
-        db.ForeignKey("categories.id", ondelete="SET NULL"), 
+        UUID(as_uuid=True),
+        db.ForeignKey("categories.id", ondelete="SET NULL"),
         index=True,
-        nullable=True
+        nullable=True,
     )
 
     # Ownership (null for system categories)

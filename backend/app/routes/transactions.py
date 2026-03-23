@@ -2,9 +2,11 @@
 Transaction routes with Flask-RESTX.
 """
 
+import logging
 import uuid
 from collections import defaultdict
 from datetime import datetime, timedelta
+from functools import wraps
 
 from flask import request, send_file
 from flask_jwt_extended import get_jwt_identity, jwt_required
@@ -20,6 +22,50 @@ from app.utils.constants import HTTP_STATUS, TransactionType
 
 # Create namespace
 transactions_ns = Namespace("transactions", description="Transaction operations")
+
+logger = logging.getLogger(__name__)
+
+
+# ============================================================================
+# Helper Decorator for Safe Caching
+# ============================================================================
+
+
+def safe_cache_cached(timeout=60, query_string=False):
+    """
+    Decorator that safely handles cache unavailability.
+    If Redis is not available, it skips caching and executes the function directly.
+    """
+
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            try:
+                if query_string:
+                    return cache.cached(timeout=timeout, query_string=True)(f)(
+                        *args, **kwargs
+                    )
+                else:
+                    return cache.cached(timeout=timeout)(f)(*args, **kwargs)
+            except Exception as e:
+                logger.debug(f"Cache unavailable, skipping cache: {str(e)}")
+                return f(*args, **kwargs)
+
+        return decorated_function
+
+    return decorator
+
+
+def safe_delete_memoized(func):
+    """
+    Safely delete memoized cache entries.
+    If Redis is not available, it silently continues.
+    """
+    try:
+        cache.delete_memoized(func)
+    except Exception as e:
+        logger.debug(f"Cache unavailable, cannot delete memoized: {str(e)}")
+
 
 # ============================================================================
 # Model Definitions
@@ -265,14 +311,14 @@ class TransactionList(Resource):
     )
     @transactions_ns.param("start_date", "Start date (YYYY-MM-DD)")
     @transactions_ns.param("end_date", "End date (YYYY-MM-DD)")
-    @transactions_ns.param("category_id", "Category ID filter", type="integer")
+    @transactions_ns.param("category_id", "Category ID filter", type="string")
     @transactions_ns.param(
         "type", "Transaction type filter", enum=TransactionType.choices()
     )
     @transactions_ns.param("search", "Search in description")
     @transactions_ns.marshal_with(transaction_list_response)
     @jwt_required()
-    @cache.cached(timeout=60, query_string=True)
+    @safe_cache_cached(timeout=60, query_string=True)  # Safe cache
     def get(self):
         """Get paginated list of transactions"""
         user_id = get_jwt_identity()
@@ -281,12 +327,24 @@ class TransactionList(Resource):
 
         query = Transaction.query.filter_by(user_id=user_id)
 
+        # Handle date filters
         if request.args.get("start_date"):
             query = query.filter(Transaction.date >= request.args["start_date"])
         if request.args.get("end_date"):
             query = query.filter(Transaction.date <= request.args["end_date"])
-        if request.args.get("category_id"):
-            query = query.filter_by(category_id=request.args["category_id"])
+
+        # Handle category_id - convert to UUID
+        category_id_param = request.args.get("category_id")
+        if category_id_param:
+            try:
+                category_uuid = uuid.UUID(category_id_param)
+                query = query.filter_by(category_id=category_uuid)
+            except ValueError:
+                transactions_ns.abort(
+                    HTTP_STATUS.BAD_REQUEST,
+                    "Invalid category_id format. Must be a valid UUID.",
+                )
+
         if request.args.get("type"):
             query = query.filter_by(type=request.args["type"])
         if request.args.get("search"):
@@ -311,6 +369,7 @@ class TransactionList(Resource):
             201: "Transaction created",
             400: "Validation error",
             401: "Authentication required",
+            415: "Invalid Content-Type",
         },
     )
     @transactions_ns.expect(transaction_create_model)
@@ -318,26 +377,43 @@ class TransactionList(Resource):
     @jwt_required()
     def post(self):
         """Create a new transaction"""
+        # Check Content-Type header
+        if not request.is_json:
+            transactions_ns.abort(
+                HTTP_STATUS.UNSUPPORTED_MEDIA_TYPE,
+                "Content-Type must be application/json",
+            )
+
         user_id = get_jwt_identity()
         data = request.json
 
-        # Use db.session.get() instead of query.get()
-        category = db.session.get(Category, data["category_id"])
+        # Validate category_id format
+        try:
+            category_uuid = uuid.UUID(data["category_id"])
+        except (KeyError, ValueError):
+            transactions_ns.abort(
+                HTTP_STATUS.BAD_REQUEST,
+                "Invalid category_id format. Must be a valid UUID.",
+            )
+
+        # Check category
+        category = db.session.get(Category, category_uuid)
         if not category:
             transactions_ns.abort(HTTP_STATUS.BAD_REQUEST, "Category not found")
 
+        # Create transaction
         transaction = Transaction(user_id=user_id, **data)
 
         db.session.add(transaction)
         db.session.commit()
 
-        # Clear cache
-        cache.delete_memoized(TransactionList.get)
+        # Clear cache safely
+        safe_delete_memoized(TransactionList.get)
 
         return TransactionSchema().dump(transaction), HTTP_STATUS.CREATED
 
 
-@transactions_ns.route("/<string:transaction_id>")  # Changed to string
+@transactions_ns.route("/<string:transaction_id>")
 @transactions_ns.param("transaction_id", "Transaction ID (UUID)")
 class TransactionDetail(Resource):
     @transactions_ns.doc(
@@ -377,6 +453,7 @@ class TransactionDetail(Resource):
             400: "Validation error",
             401: "Authentication required",
             404: "Transaction not found",
+            415: "Invalid Content-Type",
         },
     )
     @transactions_ns.expect(transaction_update_model)
@@ -384,6 +461,13 @@ class TransactionDetail(Resource):
     @jwt_required()
     def put(self, transaction_id):
         """Update transaction"""
+        # Check Content-Type header
+        if not request.is_json:
+            transactions_ns.abort(
+                HTTP_STATUS.UNSUPPORTED_MEDIA_TYPE,
+                "Content-Type must be application/json",
+            )
+
         user_id = get_jwt_identity()
         data = request.json
 
@@ -405,8 +489,8 @@ class TransactionDetail(Resource):
 
         db.session.commit()
 
-        # Clear cache
-        cache.delete_memoized(TransactionList.get)
+        # Clear cache safely
+        safe_delete_memoized(TransactionList.get)
 
         return TransactionSchema().dump(transaction)
 
@@ -445,8 +529,8 @@ class TransactionDetail(Resource):
         db.session.delete(transaction)
         db.session.commit()
 
-        # Clear cache
-        cache.delete_memoized(TransactionList.get)
+        # Clear cache safely
+        safe_delete_memoized(TransactionList.get)
 
         return {"message": "Transaction deleted"}
 
@@ -460,6 +544,7 @@ class BulkCreate(Resource):
             201: "Transactions created",
             400: "Validation error",
             401: "Authentication required",
+            415: "Invalid Content-Type",
         },
     )
     @transactions_ns.expect(bulk_create_model)
@@ -467,6 +552,13 @@ class BulkCreate(Resource):
     @jwt_required()
     def post(self):
         """Create multiple transactions"""
+        # Check Content-Type header
+        if not request.is_json:
+            transactions_ns.abort(
+                HTTP_STATUS.UNSUPPORTED_MEDIA_TYPE,
+                "Content-Type must be application/json",
+            )
+
         user_id = get_jwt_identity()
         data = request.json
 
@@ -476,7 +568,7 @@ class BulkCreate(Resource):
         for idx, tx_data in enumerate(data["transactions"]):
             try:
                 category_uuid = uuid.UUID(tx_data["category_id"])
-            except ValueError:
+            except (KeyError, ValueError):
                 errors.append({"index": idx, "error": "Invalid category ID format"})
                 continue
 
@@ -492,8 +584,8 @@ class BulkCreate(Resource):
             db.session.add_all(transactions)
             db.session.commit()
 
-        # Clear cache
-        cache.delete_memoized(TransactionList.get)
+        # Clear cache safely
+        safe_delete_memoized(TransactionList.get)
 
         return {
             "message": f"Created {len(transactions)} transactions",
@@ -519,7 +611,7 @@ class TransactionSummary(Resource):
     )
     @transactions_ns.marshal_with(summary_response)
     @jwt_required()
-    @cache.cached(timeout=300)
+    @safe_cache_cached(timeout=300)  # Safe cache
     def get(self):
         """Get transaction summary"""
         user_id = get_jwt_identity()
