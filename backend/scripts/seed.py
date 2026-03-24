@@ -1,334 +1,288 @@
 #!/usr/bin/env python3
 """
-Generate mock data for testing with UUIDs.
+Seed the database with default data.
 """
-import json
-import csv
-import argparse
+import sys
+import os
 import random
-import uuid
 from datetime import datetime, timedelta
-from faker import Faker
 
-fake = Faker()
+# Add the backend directory to the path
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-def parse_args():
-    """Parse command line arguments."""
-    parser = argparse.ArgumentParser(description='Generate mock data')
-    parser.add_argument('--type', choices=['transactions', 'budgets', 'stats', 'all'],
-                       default='all', help='Type of data')
-    parser.add_argument('--count', type=int, default=100, help='Number of records')
-    parser.add_argument('--format', choices=['json', 'csv', 'both'],
-                       default='both', help='Output format')
-    parser.add_argument('--output', default='mock_data', help='Output prefix')
-    return parser.parse_args()
+from app import create_app
+from app.extensions import db
+from app.models.user import User
+from app.models.category import Category
+from app.models.transaction import Transaction
+from app.models.budget import Budget
+from app.models.monthly_stats import MonthlyStat
 
-def generate_transactions(count):
-    """Generate mock transactions with UUIDs."""
-    categories = {
-        'income': ['Salary', 'Freelance', 'Investment', 'Gifts'],
-        'expense': ['Groceries', 'Rent', 'Utilities', 'Entertainment', 
-                   'Transportation', 'Healthcare', 'Dining Out', 'Shopping'],
-        'transfer': ['Transfer']
-    }
-    
-    colors = {
-        'Salary': '#28a745', 'Freelance': '#17a2b8', 'Investment': '#ffc107',
-        'Gifts': '#e83e8c', 'Groceries': '#dc3545', 'Rent': '#fd7e14',
-        'Utilities': '#6c757d', 'Entertainment': '#e83e8c', 'Transportation': '#20c997',
-        'Healthcare': '#007bff', 'Dining Out': '#6610f2', 'Shopping': '#d63384',
-        'Transfer': '#6f42c1'
-    }
-    
-    # Generate a consistent user UUID for all transactions (mock user)
-    user_uuid = uuid.uuid4()
-    
-    transactions = []
-    end_date = datetime.now().date()
-    start_date = end_date - timedelta(days=365)
-    
-    for i in range(count):
-        tx_date = start_date + timedelta(days=random.randint(0, 365))
-        
-        rand = random.random()
-        if rand < 0.3:
-            tx_type = 'income'
-            cat_name = random.choice(categories['income'])
-            amount = round(random.uniform(500, 5000), 2)
-        elif rand < 0.65:
-            tx_type = 'expense'
-            cat_name = random.choice(categories['expense'])
-            amount = round(random.uniform(5, 500), 2)
-        else:
-            tx_type = 'transfer'
-            cat_name = 'Transfer'
-            amount = round(random.uniform(50, 1000), 2)
-        
-        # Generate category UUID
-        category_uuid = uuid.uuid4()
-        
-        transactions.append({
-            'id': str(uuid.uuid4()), 
-            'user_id': str(user_uuid),  
-            'category_id': str(category_uuid),  
-            'date': tx_date.isoformat(),
-            'description': fake.sentence(nb_words=4),
-            'amount': amount,
-            'type': tx_type,
-            'category_name': cat_name,
-            'category_color': colors.get(cat_name, '#808080'),
-            'notes': fake.text(max_nb_chars=200) if random.random() < 0.3 else '',
-            'tags': random.sample(['work', 'personal', 'travel', 'food'], 
-                                 k=random.randint(0, 2)) if random.random() < 0.5 else [],
-            'is_recurring': random.random() < 0.1,  # 10% chance of recurring
-            'recurring_frequency': random.choice(['monthly', 'weekly', None]) if random.random() < 0.05 else None,
-            'created_at': datetime.now().isoformat(),
-            'updated_at': datetime.now().isoformat()
-        })
-    
-    return sorted(transactions, key=lambda x: x['date'])
+def clear_all_data():
+    """Clear all existing data."""
+    print("Clearing existing data...")
+    MonthlyStat.query.delete()
+    Budget.query.delete()
+    Transaction.query.delete()
+    Category.query.delete()
+    User.query.delete()
+    db.session.commit()
+    print("✅ Data cleared")
 
-def generate_budgets(count):
-    """Generate mock budgets with UUIDs."""
-    categories = [
-        {'name': 'Groceries', 'color': '#dc3545'},
-        {'name': 'Dining Out', 'color': '#6610f2'},
-        {'name': 'Entertainment', 'color': '#e83e8c'},
-        {'name': 'Transportation', 'color': '#20c997'},
-        {'name': 'Shopping', 'color': '#d63384'},
-        {'name': 'Utilities', 'color': '#6c757d'}
+def seed_users():
+    """Seed users."""
+    print("\nSeeding users...")
+    
+    users_data = [
+        {
+            'username': 'admin',
+            'password': 'Admin123!@#',
+            'email': 'admin@finviz.com',
+            'first_name': 'Admin',
+            'last_name': 'User',
+            'role': 'admin',
+            'status': 'active'
+        },
+        {
+            'username': 'johndoe',
+            'password': 'John123!@#',
+            'email': 'john.doe@example.com',
+            'first_name': 'John',
+            'last_name': 'Doe',
+            'role': 'user',
+            'status': 'active'
+        },
+        {
+            'username': 'janesmith',
+            'password': 'Jane123!@#',
+            'email': 'jane.smith@example.com',
+            'first_name': 'Jane',
+            'last_name': 'Smith',
+            'role': 'user',
+            'status': 'active'
+        },
+        {
+            'username': 'bobjohnson',
+            'password': 'Bob123!@#',
+            'email': 'bob.johnson@example.com',
+            'first_name': 'Bob',
+            'last_name': 'Johnson',
+            'role': 'user',
+            'status': 'inactive'
+        }
     ]
     
-    # Generate a consistent user UUID for all budgets
-    user_uuid = uuid.uuid4()
+    created = []
+    for user_data in users_data:
+        print(f"  Creating user: {user_data['username']}")
+        
+        user = User(
+            username=user_data['username'],
+            email=user_data['email'],
+            first_name=user_data['first_name'],
+            last_name=user_data['last_name'],
+            role=user_data['role'],
+            status=user_data['status'],
+            email_verified=True
+        )
+        user.set_password(user_data['password'])
+        
+        # Verify password was set correctly
+        if not user.check_password(user_data['password']):
+            print(f"    ERROR: Password not set correctly for {user_data['username']}")
+            continue
+        
+        db.session.add(user)
+        db.session.flush()
+        created.append(user)
+        
+        print(f"    ✓ Created user {user_data['username']} (ID: {user.id})")
+        print(f"      Password: {user_data['password']}")
+        print(f"      Email: {user_data['email']}")
+        print(f"      Role: {user_data['role']}")
     
-    budgets = []
-    year = datetime.now().year
+    db.session.commit()
+    print(f"✅ Seeded {len(created)} users")
     
-    for i in range(count):
-        category = random.choice(categories)
-        period = random.choice(['monthly', 'yearly'])
-        
-        # Generate category UUID
-        category_uuid = uuid.uuid4()
-        
-        if period == 'monthly':
-            amount = round(random.uniform(200, 1000), 2)
-            month = random.randint(1, 12)
-        else:
-            amount = round(random.uniform(2000, 10000), 2)
-            month = None
-        
-        # Calculate spent amount (random percentage of budget)
-        spent = round(random.uniform(0, amount * 1.2), 2)
-        remaining = round(amount - spent, 2)
-        spent_percentage = round((spent / amount) * 100, 1) if amount > 0 else 0
-        
-        budgets.append({
-            'id': str(uuid.uuid4()),  
-            'user_id': str(user_uuid),  
-            'category_id': str(category_uuid), 
-            'category_name': category['name'],
-            'category_color': category['color'],
-            'amount': amount,
-            'period': period,
-            'year': year,
-            'month': month,
-            'spent': spent,
-            'remaining': remaining,
-            'spent_percentage': spent_percentage,
-            'alert_threshold': 80,
-            'is_over_budget': spent > amount,
-            'should_alert': spent_percentage >= 80,
-            'is_active': True,
-            'rollover': random.random() < 0.3,
-            'notes': fake.sentence(nb_words=5) if random.random() < 0.3 else '',
-            'created_at': datetime.now().isoformat(),
-            'updated_at': datetime.now().isoformat()
-        })
+    # Verify all users can login
+    for user in created:
+        if user.status == 'active':
+            password = 'Admin123!@#' if user.username == 'admin' else user.username.capitalize() + '123!@#'
+            if not user.check_password(password):
+                print(f"  ⚠️ WARNING: User {user.username} cannot login with password '{password}'")
+            else:
+                print(f"  ✓ User {user.username} can login")
     
-    return budgets
+    return created
 
-def generate_stats():
-    """Generate monthly statistics with UUIDs."""
-    # Generate a consistent user UUID for all stats
-    user_uuid = uuid.uuid4()
+def seed_categories(users):
+    """Seed categories for each user."""
+    print("\nSeeding categories...")
     
-    stats = []
-    year = datetime.now().year
+    system_categories = [
+        # Income categories
+        {'name': 'Salary', 'type': 'income', 'color': '#28a745', 'icon': 'briefcase'},
+        {'name': 'Freelance', 'type': 'income', 'color': '#17a2b8', 'icon': 'laptop'},
+        {'name': 'Investment', 'type': 'income', 'color': '#ffc107', 'icon': 'graph-up'},
+        {'name': 'Gifts', 'type': 'income', 'color': '#e83e8c', 'icon': 'gift'},
+        {'name': 'Refunds', 'type': 'income', 'color': '#6c757d', 'icon': 'arrow-return-left'},
+        
+        # Expense categories
+        {'name': 'Groceries', 'type': 'expense', 'color': '#dc3545', 'icon': 'basket'},
+        {'name': 'Rent', 'type': 'expense', 'color': '#fd7e14', 'icon': 'house'},
+        {'name': 'Utilities', 'type': 'expense', 'color': '#6c757d', 'icon': 'lightning'},
+        {'name': 'Entertainment', 'type': 'expense', 'color': '#e83e8c', 'icon': 'film'},
+        {'name': 'Transportation', 'type': 'expense', 'color': '#20c997', 'icon': 'car'},
+        {'name': 'Healthcare', 'type': 'expense', 'color': '#007bff', 'icon': 'heart'},
+        {'name': 'Dining Out', 'type': 'expense', 'color': '#6610f2', 'icon': 'cup-straw'},
+        {'name': 'Shopping', 'type': 'expense', 'color': '#d63384', 'icon': 'bag'},
+        {'name': 'Education', 'type': 'expense', 'color': '#0dcaf0', 'icon': 'book'},
+        {'name': 'Insurance', 'type': 'expense', 'color': '#198754', 'icon': 'shield'},
+        {'name': 'Subscriptions', 'type': 'expense', 'color': '#6f42c1', 'icon': 'repeat'},
+        {'name': 'Travel', 'type': 'expense', 'color': '#0d6efd', 'icon': 'airplane'},
+        {'name': 'Pets', 'type': 'expense', 'color': '#e83e8c', 'icon': 'heart'},
+        {'name': 'Gym', 'type': 'expense', 'color': '#20c997', 'icon': 'dumbbell'},
+        
+        # Transfer categories
+        {'name': 'Transfer', 'type': 'transfer', 'color': '#6f42c1', 'icon': 'arrow-left-right'},
+        {'name': 'Credit Card Payment', 'type': 'transfer', 'color': '#dc3545', 'icon': 'credit-card'},
+    ]
     
-    for month in range(1, 13):
-        base_income = random.uniform(3000, 5000)
-        base_expense = random.uniform(2000, 4000)
-        
-        # Add seasonality
-        if month in [12, 1]:
-            expense_multiplier = 1.3
-        elif month in [6, 7, 8]:
-            expense_multiplier = 1.1
-        else:
-            expense_multiplier = 1.0
-        
-        income = round(base_income * random.uniform(0.9, 1.1), 2)
-        expense = round(base_expense * expense_multiplier * random.uniform(0.9, 1.1), 2)
-        savings = round(income - expense, 2)
-        savings_rate = round((savings / income) * 100, 1) if income > 0 else 0
-        transaction_count = random.randint(20, 50)
-        
-        # Generate category breakdown for the month
-        category_breakdown = []
-        top_categories = []
-        categories = ['Groceries', 'Dining Out', 'Entertainment', 'Transportation', 'Shopping', 'Utilities']
-        
-        for cat in categories:
-            cat_amount = round(expense * random.uniform(0.05, 0.3), 2)
-            cat_count = random.randint(1, 10)
-            percentage = round((cat_amount / expense) * 100, 1) if expense > 0 else 0
+    total_categories = 0
+    for user in users:
+        if user.status != 'active':
+            continue
             
-            breakdown = {
-                'name': cat,
-                'color': {
-                    'Groceries': '#dc3545',
-                    'Dining Out': '#6610f2',
-                    'Entertainment': '#e83e8c',
-                    'Transportation': '#20c997',
-                    'Shopping': '#d63384',
-                    'Utilities': '#6c757d'
-                }.get(cat, '#808080'),
-                'amount': cat_amount,
-                'count': cat_count,
-                'percentage': percentage
-            }
-            category_breakdown.append(breakdown)
+        count = 0
+        for cat_data in system_categories:
+            existing = Category.query.filter_by(name=cat_data['name'], user_id=user.id).first()
+            if existing:
+                continue
             
-            if random.random() < 0.3:  # 30% chance to be in top categories
-                top_categories.append(breakdown)
+            category = Category(
+                user_id=user.id,
+                name=cat_data['name'],
+                type=cat_data['type'],
+                color=cat_data['color'],
+                icon=cat_data['icon'],
+                is_system=True,
+                is_active=True
+            )
+            db.session.add(category)
+            count += 1
         
-        # Sort top categories by amount
-        top_categories = sorted(top_categories, key=lambda x: x['amount'], reverse=True)[:3]
-        
-        stats.append({
-            'id': str(uuid.uuid4()),
-            'user_id': str(user_uuid), 
-            'year': year,
-            'month': month,
-            'month_name': datetime(year, month, 1).strftime('%B'),
-            'total_income': income,
-            'total_expense': expense,
-            'net_savings': savings,
-            'savings_rate': savings_rate,
-            'transaction_count': transaction_count,
-            'average_transaction': round((income + expense) / transaction_count, 2) if transaction_count > 0 else 0,
-            'top_categories': top_categories,
-            'category_breakdown': category_breakdown,
-            'best_day': (datetime(year, month, random.randint(1, 28)).date()).isoformat() if random.random() < 0.7 else None,
-            'worst_day': (datetime(year, month, random.randint(1, 28)).date()).isoformat() if random.random() < 0.7 else None,
-            'created_at': datetime.now().isoformat(),
-            'updated_at': datetime.now().isoformat()
-        })
+        total_categories += count
+        print(f"  Created {count} categories for {user.username}")
     
-    return stats
+    db.session.commit()
+    print(f"✅ Seeded {total_categories} categories")
 
-def generate_users(count=5):
-    """Generate mock users with UUIDs."""
-    users = []
+def seed_transactions(users, count=50):
+    """Seed transactions for each user."""
+    print("\nSeeding transactions...")
     
-    for i in range(count):
-        first_name = fake.first_name()
-        last_name = fake.last_name()
+    total_transactions = 0
+    
+    for user in users:
+        if user.status != 'active':
+            continue
+            
+        # Get categories for this user
+        income_cats = Category.query.filter_by(user_id=user.id, type='income').all()
+        expense_cats = Category.query.filter_by(user_id=user.id, type='expense').all()
+        transfer_cats = Category.query.filter_by(user_id=user.id, type='transfer').all()
         
-        users.append({
-            'id': str(uuid.uuid4()),  # UUID
-            'username': f"{first_name.lower()}{last_name.lower()}{random.randint(1, 999)}",
-            'email': fake.email(),
-            'first_name': first_name,
-            'last_name': last_name,
-            'full_name': f"{first_name} {last_name}",
-            'password_hash': '$2b$12$hashed_password_placeholder',  # Placeholder hash
-            'role': random.choice(['user', 'admin']) if i == 0 else 'user',
-            'status': random.choice(['active', 'inactive']) if random.random() < 0.9 else 'suspended',
-            'preferences': {
-                'currency': random.choice(['USD', 'EUR', 'GBP']),
-                'theme': random.choice(['light', 'dark']),
-                'language': 'en',
-                'notifications': {
-                    'email': random.choice([True, False]),
-                    'budget_alerts': True
-                },
-                'dashboard': {
-                    'default_view': 'monthly',
-                    'chart_type': 'line',
-                    'show_recent': 10
-                }
-            },
-            'email_verified': random.random() < 0.8,
-            'created_at': (datetime.now() - timedelta(days=random.randint(1, 365))).isoformat(),
-            'last_login': (datetime.now() - timedelta(days=random.randint(0, 30))).isoformat() if random.random() < 0.9 else None
-        })
-    
-    return users
-
-def save_json(data, filename):
-    """Save data as JSON."""
-    with open(filename, 'w') as f:
-        json.dump(data, f, indent=2, default=str) 
-    print(f"Saved {len(data)} records to {filename}")
-
-def save_csv(data, filename):
-    """Save data as CSV."""
-    if not data:
-        return
-    
-    with open(filename, 'w', newline='') as f:
-        # Handle nested structures for CSV (simplify complex fields)
-        simplified_data = []
-        for record in data:
-            simplified_record = {}
-            for key, value in record.items():
-                if isinstance(value, (dict, list)):
-                    # Convert nested structures to JSON string
-                    simplified_record[key] = json.dumps(value)
-                else:
-                    simplified_record[key] = value
-            simplified_data.append(simplified_record)
+        transactions = []
+        end_date = datetime.now().date()
+        start_date = end_date - timedelta(days=365)
         
-        writer = csv.DictWriter(f, fieldnames=simplified_data[0].keys())
-        writer.writeheader()
-        writer.writerows(simplified_data)
-    print(f"Saved {len(data)} records to {filename}")
+        for i in range(count):
+            tx_date = start_date + timedelta(days=random.randint(0, 365))
+            
+            rand = random.random()
+            if rand < 0.25 and income_cats:
+                tx_type = 'income'
+                category = random.choice(income_cats)
+                amount = round(random.uniform(1000, 8000), 2)
+                if category.name == 'Salary':
+                    amount = round(random.uniform(3000, 8000), 2)
+            elif rand < 0.7 and expense_cats:
+                tx_type = 'expense'
+                category = random.choice(expense_cats)
+                amount = round(random.uniform(10, 500), 2)
+                if category.name == 'Rent':
+                    amount = round(random.uniform(1000, 3000), 2)
+                elif category.name in ['Groceries', 'Dining Out']:
+                    amount = round(random.uniform(20, 300), 2)
+            elif transfer_cats:
+                tx_type = 'transfer'
+                category = random.choice(transfer_cats)
+                amount = round(random.uniform(100, 2000), 2)
+            else:
+                continue
+            
+            transaction = Transaction(
+                user_id=user.id,
+                category_id=category.id,
+                amount=amount,
+                description=f"{category.name} - {tx_date.strftime('%b %Y')}",
+                date=tx_date,
+                type=tx_type,
+                notes="",
+                tags=[],
+                is_recurring=False
+            )
+            db.session.add(transaction)
+            transactions.append(transaction)
+        
+        total_transactions += len(transactions)
+        print(f"  Created {len(transactions)} transactions for {user.username}")
+    
+    db.session.commit()
+    print(f"✅ Seeded {total_transactions} transactions")
 
 def main():
-    """Main function."""
-    args = parse_args()
+    """Main seed function."""
+    app = create_app()
     
-    if args.type in ['transactions', 'all']:
-        data = generate_transactions(args.count)
-        if args.format in ['json', 'both']:
-            save_json(data, f"{args.output}_transactions.json")
-        if args.format in ['csv', 'both']:
-            save_csv(data, f"{args.output}_transactions.csv")
-    
-    if args.type in ['budgets', 'all']:
-        data = generate_budgets(min(20, args.count))
-        if args.format in ['json', 'both']:
-            save_json(data, f"{args.output}_budgets.json")
-        if args.format in ['csv', 'both']:
-            save_csv(data, f"{args.output}_budgets.csv")
-    
-    if args.type in ['stats', 'all']:
-        data = generate_stats()
-        if args.format in ['json', 'both']:
-            save_json(data, f"{args.output}_stats.json")
-        if args.format in ['csv', 'both']:
-            save_csv(data, f"{args.output}_stats.csv")
-    
-    # Generate users separately if needed
-    if args.type == 'all':
-        users = generate_users(5)
-        if args.format in ['json', 'both']:
-            save_json(users, f"{args.output}_users.json")
-        if args.format in ['csv', 'both']:
-            save_csv(users, f"{args.output}_users.csv")
+    with app.app_context():
+        print("="*60)
+        print("🌱 STARTING DATABASE SEED")
+        print("="*60)
+        
+        # Clear existing data
+        clear_all_data()
+        
+        # Seed users
+        users = seed_users()
+        
+        # Seed categories
+        seed_categories(users)
+        
+        # Seed transactions
+        seed_transactions(users)
+        
+        print("\n" + "="*60)
+        print("✅ DATABASE SEED COMPLETE")
+        print("="*60)
+        print("\n📋 TEST USER CREDENTIALS:")
+        print("-"*40)
+        for user in users:
+            if user.username == 'admin':
+                print(f"\n  👑 ADMIN USER:")
+                print(f"     Username: {user.username}")
+                print(f"     Password: Admin123!@#")
+                print(f"     Email: {user.email}")
+            elif user.status == 'active':
+                password = user.username.capitalize() + '123!@#'
+                print(f"\n  👤 REGULAR USER:")
+                print(f"     Username: {user.username}")
+                print(f"     Password: {password}")
+                print(f"     Email: {user.email}")
+        
+        print("\n" + "="*60)
+        print("⚠️  IMPORTANT: Use these exact credentials (case sensitive)")
+        print("="*60)
 
 if __name__ == '__main__':
     main()

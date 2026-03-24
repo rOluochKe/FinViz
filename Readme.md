@@ -22,6 +22,15 @@ finviz-pro/
 - [Backend Documentation](/backend/README.md) - API, database, authentication
 - [Frontend Documentation](./frontend/README.md) - Components, state management, styling
 
+## ✅ Working Test Users
+
+| Username   | Password      | Role    | Status   |
+|------------|---------------|---------|----------|
+| admin      | `Admin123!@#` | admin   | active   |
+| johndoe    | `John123!@#`  | user    | active   |
+| janesmith  | `Jane123!@#`  | user    | active   |
+| bobjohnson | `Bob123!@#`   | user    | inactive |
+
 ## 🛠️ Tech Stack
 
 - **Backend**: Flask, PostgreSQL, Redis, JWT

@@ -33,7 +33,7 @@ class AnalyticsService {
       return response;
     } catch (error) {
       console.error('Failed to get spending patterns:', error);
-      // Return a default empty structure
+      // Return default empty structure
       return {
         period: { start: '', end: '', months: 0 },
         summary: {

@@ -208,30 +208,33 @@ class DashboardService:
                 m += 12
                 y -= 1
 
-            stats = MonthlyStat.query.filter_by(
-                user_id=user_id, year=y, month=m
-            ).first()
-
-            if stats:
-                data.append(
-                    {
-                        "month": f"{y}-{m:02d}",
-                        "date": f"{y}-{m:02d}",
-                        "income": float(stats.total_income),
-                        "expense": float(stats.total_expense),
-                        "net": float(stats.net_savings) if stats.net_savings else 0,
-                    }
-                )
+            # Calculate from transactions directly instead of MonthlyStat
+            start_date = date(y, m, 1)
+            if m == 12:
+                end_date = date(y + 1, 1, 1)
             else:
-                data.append(
-                    {
-                        "month": f"{y}-{m:02d}",
-                        "date": f"{y}-{m:02d}",
-                        "income": 0,
-                        "expense": 0,
-                        "net": 0,
-                    }
-                )
+                end_date = date(y, m + 1, 1)
+
+            transactions = Transaction.query.filter(
+                Transaction.user_id == user_id,
+                Transaction.date >= start_date,
+                Transaction.date < end_date,
+            ).all()
+
+            income = sum(t.amount for t in transactions if t.is_income)
+            expense = sum(t.amount for t in transactions if t.is_expense)
+            net = income - expense
+
+            data.append(
+                {
+                    "month": f"{y}-{m:02d}",
+                    "date": f"{y}-{m:02d}",
+                    "income": float(income),
+                    "expense": float(expense),
+                    "net": float(net),
+                    "savings": float(net),
+                }
+            )
 
         return {"trends": list(reversed(data))}
 

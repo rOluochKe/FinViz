@@ -60,6 +60,7 @@ const SpendingChart: React.FC<SpendingChartProps> = ({ type, data, height = 300 
             outerRadius={80}
             fill="#8884d8"
             dataKey="amount"
+            nameKey="category"
           >
             {pieData.map((entry, index) => (
               <Cell key={`cell-${index}`} fill={entry.color || COLORS[index % COLORS.length]} />
@@ -96,9 +97,16 @@ const SpendingChart: React.FC<SpendingChartProps> = ({ type, data, height = 300 
   const renderLineChart = () => {
     const lineData = data as TimeSeriesData[];
 
+    const transformedData = lineData.map((item) => ({
+      date: item.month,
+      income: item.income,
+      expense: item.expense,
+      net: item.savings,
+    }));
+
     return (
       <ResponsiveContainer width="100%" height={height}>
-        <LineChart data={lineData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+        <LineChart data={transformedData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis dataKey="date" />
           <YAxis tickFormatter={(value: any) => formatCurrency(value)} />

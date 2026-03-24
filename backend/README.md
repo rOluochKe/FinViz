@@ -74,7 +74,7 @@ make docker-up
 # Run database migrations
 make db-upgrade
 
-# Seed database with test data (optional)
+# Seed database with test data
 make seed
 
 # Access the API
@@ -111,7 +111,7 @@ createdb finviz_test
 # Run migrations
 make db-upgrade
 
-# Seed database (optional)
+# Seed database
 make seed
 
 # Run the app
@@ -133,6 +133,16 @@ make run-dev
 # API: http://localhost:5000
 # Docs: http://localhost:5000/api/docs
 ```
+
+### Working Test Users
+
+| Username   | Password      | Role    | Status   |
+|------------|---------------|---------|----------|
+| admin      | `Admin123!@#` | admin   | active   |
+| johndoe    | `John123!@#`  | user    | active   |
+| janesmith  | `Jane123!@#`  | user    | active   |
+| bobjohnson | `Bob123!@#`   | user    | inactive |
+
 
 ### Production Server
 

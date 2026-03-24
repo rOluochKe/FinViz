@@ -43,6 +43,24 @@ class AnalyticsService:
             Transaction.type == "expense",
         ).all()
 
+        if len(transactions) < 1:
+            return {
+                "error": "Insufficient data",
+                "summary": {
+                    "total_spending": 0,
+                    "transaction_count": 0,
+                    "avg_transaction": 0,
+                    "median_transaction": 0,
+                    "avg_monthly_spending": 0,
+                },
+                "by_day": [],
+                "by_category": [],
+                "monthly_trend": {
+                    "growth": 0,
+                    "is_increasing": False,
+                },
+            }
+
         if len(transactions) < 10:
             return {"error": "Insufficient data"}
 

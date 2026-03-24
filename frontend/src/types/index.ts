@@ -321,8 +321,10 @@ export interface CategorySpending {
 export interface TimeSeriesData {
   date: string;
   income: number;
+  month?: string;
   expense: number;
   net: number;
+  savings?: number;
 }
 
 export interface DashboardInsight {

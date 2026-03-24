@@ -93,6 +93,16 @@ cp .env.example .env
 npm start
 ```
 
+### Working Test Users
+
+| Username   | Password      | Role    | Status   |
+|------------|---------------|---------|----------|
+| admin      | `Admin123!@#` | admin   | active   |
+| johndoe    | `John123!@#`  | user    | active   |
+| janesmith  | `Jane123!@#`  | user    | active   |
+| bobjohnson | `Bob123!@#`   | user    | inactive |
+
+
 ## 📜 Available Scripts
 
 ### Development
