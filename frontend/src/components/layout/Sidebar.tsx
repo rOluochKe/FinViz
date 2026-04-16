@@ -4,12 +4,10 @@ import { Fragment } from 'react';
 import { Dialog, Transition } from '@headlessui/react';
 
 import {
-  ArrowDownTrayIcon,
   CalculatorIcon,
   ChartPieIcon,
   Cog6ToothIcon,
   CreditCardIcon,
-  DocumentTextIcon,
   HomeIcon,
   ShieldCheckIcon,
   TagIcon,
@@ -36,8 +34,6 @@ const Sidebar: React.FC<SidebarProps> = ({ open, setOpen }) => {
     { name: 'Categories', href: '/categories', icon: TagIcon },
     { name: 'Budgets', href: '/budgets', icon: CalculatorIcon },
     { name: 'Analytics', href: '/analytics', icon: ChartPieIcon },
-    { name: 'Reports', href: '/reports', icon: DocumentTextIcon },
-    { name: 'Exports/Imports', href: '/exports-imports', icon: ArrowDownTrayIcon },
     { name: 'Settings', href: '/settings', icon: Cog6ToothIcon },
   ];
 

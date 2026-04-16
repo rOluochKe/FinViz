@@ -203,7 +203,7 @@ const Home: React.FC = () => {
               <div className="absolute -top-4 left-1/2 -translate-x-1/2 w-48 h-48 bg-primary-200 rounded-full blur-3xl opacity-30" />
               <div className="relative rounded-xl bg-gray-900/5 p-2 ring-1 ring-inset ring-gray-900/10 lg:rounded-2xl">
                 <img
-                  src="/finviz-screenshot.png"
+                  src="/user.png"
                   alt="FinViz Pro Dashboard Preview"
                   className="rounded-lg shadow-2xl ring-1 ring-gray-900/10"
                 />

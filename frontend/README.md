@@ -103,6 +103,12 @@ npm start
 | bobjohnson | `Bob123!@#`   | user    | inactive |
 
 
+### System Overview
+
+![Admin Dashboard](public/admin.png)
+
+![User Dashboard](public/user.png)
+
 ## 📜 Available Scripts
 
 ### Development
