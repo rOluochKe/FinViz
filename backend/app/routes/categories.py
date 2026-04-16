@@ -343,24 +343,40 @@ class CategoryList(Resource):
     )
     @categories_ns.param("type", "Filter by category type (income/expense/transfer)")
     @categories_ns.param(
-        "include_system", "Include system categories", type="boolean", default=True
+        "include_system",
+        "Include system categories",
+        type="boolean",
+        default=False,  # Changed from True to False
     )
     @categories_ns.marshal_list_with(category_model)
     @jwt_required()
     @safe_cache_cached(timeout=300, query_string=True)
     def get(self):
-        """Get all categories"""
+        """Get all categories for the authenticated user"""
         user_id = get_jwt_identity()
 
-        type_filter = request.args.get("type")
-        include_system = request.args.get("include_system", "true").lower() == "true"
+        # Convert to UUID for proper DB comparison
+        try:
+            user_uuid = uuid.UUID(user_id) if isinstance(user_id, str) else user_id
+        except (ValueError, TypeError):
+            categories_ns.abort(HTTP_STATUS.BAD_REQUEST, "Invalid user ID format")
 
-        query = Category.query.filter(
-            db.or_(
-                Category.user_id == user_id,
-                db.and_(Category.is_system == True, include_system == True),
+        type_filter = request.args.get("type")
+        # Default is now False - only show user categories
+        include_system = (
+            request.args.get("include_system", "false").lower() == "true"
+        )  # Changed default to "false"
+
+        if include_system:
+            query = Category.query.filter(
+                db.or_(
+                    Category.user_id == user_uuid,
+                    Category.is_system == True,
+                )
             )
-        )
+        else:
+            # Only return user-specific categories (is_system=False)
+            query = Category.query.filter(Category.user_id == user_uuid)
 
         if type_filter:
             query = query.filter(Category.type == type_filter)

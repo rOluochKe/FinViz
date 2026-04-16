@@ -88,10 +88,7 @@ make seed
 ```bash
 # Clone the repository
 git clone git@github.com:rOluochKe/FinViz.git
-cd finviz-pro-backend
-
-# Install UV package manager
-pip install uv
+cd FinViz/backend
 
 # Create and activate virtual environment
 uv venv
@@ -108,7 +105,13 @@ cp .env.example .env
 createdb finviz_dev
 createdb finviz_test
 
-# Run migrations
+# Initialize migrations (first time only)
+make db-init
+
+# Create a new migration
+make db-migrate
+
+# Apply migrations
 make db-upgrade
 
 # Seed database
@@ -133,6 +136,10 @@ make run-dev
 # API: http://localhost:5000
 # Docs: http://localhost:5000/api/docs
 ```
+
+### API Docs
+
+![API Documentation](screenshot/api.png)
 
 ### Working Test Users
 

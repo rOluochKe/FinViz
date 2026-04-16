@@ -21,11 +21,15 @@ from app.models.monthly_stats import MonthlyStat
 def clear_all_data():
     """Clear all existing data."""
     print("Clearing existing data...")
+    
+    # Delete in correct order to avoid foreign key violations
     MonthlyStat.query.delete()
     Budget.query.delete()
     Transaction.query.delete()
     Category.query.delete()
     User.query.delete()
+    
+    # Commit to ensure deletions are persisted
     db.session.commit()
     print("✅ Data cleared")
 
@@ -149,33 +153,39 @@ def seed_categories(users):
     ]
     
     total_categories = 0
+    
     for user in users:
         if user.status != 'active':
             continue
-            
-        count = 0
+        
+        # Get existing category names for this user
+        existing_categories = Category.query.filter_by(user_id=user.id).all()
+        existing_names = {cat.name for cat in existing_categories}
+        
         for cat_data in system_categories:
-            existing = Category.query.filter_by(name=cat_data['name'], user_id=user.id).first()
-            if existing:
+            # Skip if category already exists for this user
+            if cat_data['name'] in existing_names:
                 continue
             
+            # IMPORTANT: Set is_system=False for user-specific categories
             category = Category(
                 user_id=user.id,
                 name=cat_data['name'],
                 type=cat_data['type'],
                 color=cat_data['color'],
                 icon=cat_data['icon'],
-                is_system=True,
+                is_system=False,
                 is_active=True
             )
             db.session.add(category)
-            count += 1
+            total_categories += 1
         
-        total_categories += count
-        print(f"  Created {count} categories for {user.username}")
+        db.session.commit()
+        print(f"  Created {len([c for c in system_categories if c['name'] not in existing_names])} categories for {user.username}")
     
-    db.session.commit()
-    print(f"✅ Seeded {total_categories} categories")
+    print(f"✅ Seeded {total_categories} new categories")
+
+
 
 def seed_transactions(users, count=50):
     """Seed transactions for each user."""
