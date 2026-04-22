@@ -1,8 +1,11 @@
 import React, { useCallback, useEffect, useState } from 'react';
 
-import { EyeIcon, PencilIcon, TrashIcon } from '@heroicons/react/24/outline';
+import { DocumentArrowDownIcon, EyeIcon, PencilIcon, TrashIcon } from '@heroicons/react/24/outline';
 
 import { format } from 'date-fns';
+import { saveAs } from 'file-saver';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import DataTable from 'react-data-table-component';
 import toast from 'react-hot-toast';
 
@@ -45,6 +48,82 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [selectedRows, setSelectedRows] = useState<Transaction[]>([]);
   const [filterDebounceTimer] = useState<NodeJS.Timeout | null>(null);
+
+  const handleExportCSV = () => {
+    const exportData = selectedRows.length > 0 ? selectedRows : transactions;
+
+    if (exportData.length === 0) {
+      toast.error('No data to export');
+      return;
+    }
+
+    // Prepare CSV headers
+    const headers = ['Date', 'Description', 'Category', 'Amount', 'Type', 'Tags'];
+
+    // Prepare CSV rows
+    const rows = exportData.map((row) => [
+      format(new Date(row.date), 'yyyy-MM-dd'),
+      row.description,
+      row.category_name || 'Uncategorized',
+      `${row.type === 'income' ? '+' : '-'}$${row.amount.toFixed(2)}`,
+      row.type,
+      row.tags?.join('; ') || '',
+    ]);
+
+    // Create CSV content
+    const csvContent = [
+      headers.join(','),
+      ...rows.map((row) => row.map((cell) => `"${cell}"`).join(',')),
+    ].join('\n');
+
+    // Download CSV
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    saveAs(blob, `transactions_${format(new Date(), 'yyyy-MM-dd')}.csv`);
+    toast.success(`Exported ${exportData.length} transactions to CSV`);
+  };
+
+  const handleExportPDF = () => {
+    const exportData = selectedRows.length > 0 ? selectedRows : transactions;
+
+    if (exportData.length === 0) {
+      toast.error('No data to export');
+      return;
+    }
+
+    // Create PDF document
+    const doc = new jsPDF('landscape');
+
+    // Add title
+    doc.setFontSize(16);
+    doc.text('Transactions Report', 14, 15);
+    doc.setFontSize(10);
+    doc.text(`Generated: ${format(new Date(), 'yyyy-MM-dd HH:mm')}`, 14, 22);
+    doc.text(`Total Records: ${exportData.length}`, 14, 28);
+
+    // Prepare table data
+    const tableData = exportData.map((row) => [
+      format(new Date(row.date), 'yyyy-MM-dd'),
+      row.description,
+      row.category_name || 'Uncategorized',
+      `${row.type === 'income' ? '+' : '-'}$${row.amount.toFixed(2)}`,
+      row.type,
+      row.tags?.slice(0, 3).join(', ') || '',
+    ]);
+
+    // Generate table
+    autoTable(doc, {
+      head: [['Date', 'Description', 'Category', 'Amount', 'Type', 'Tags']],
+      body: tableData,
+      startY: 35,
+      styles: { fontSize: 8, cellPadding: 2 },
+      headStyles: { fillColor: [59, 130, 246], textColor: 255 },
+      alternateRowStyles: { fillColor: [243, 244, 246] },
+    });
+
+    // Save PDF
+    doc.save(`transactions_${format(new Date(), 'yyyy-MM-dd')}.pdf`);
+    toast.success(`Exported ${exportData.length} transactions to PDF`);
+  };
 
   const formatCurrency = (amount: number, type: string) => {
     const formatter = new Intl.NumberFormat('en-US', {
@@ -124,13 +203,13 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
     }
   };
 
-  const handleExport = () => {
-    if (!selectedRows.length) {
-      toast.error('No rows selected');
-      return;
-    }
-    window.open(`/api/transactions/export?ids=${selectedRows.map((r) => r.id).join(',')}`);
-  };
+  // const handleExport = () => {
+  //   if (!selectedRows.length) {
+  //     toast.error('No rows selected');
+  //     return;
+  //   }
+  //   window.open(`/api/transactions/export?ids=${selectedRows.map((r) => r.id).join(',')}`);
+  // };
 
   useEffect(() => {
     return () => {
@@ -327,13 +406,31 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
             <Button variant="danger" size="sm" onClick={handleBulkDelete}>
               Delete Selected ({selectedRows.length})
             </Button>
-            <Button variant="secondary" size="sm" onClick={handleExport}>
+            <Button variant="secondary" size="sm" onClick={handleExportCSV}>
+              <DocumentArrowDownIcon className="h-4 w-4 mr-1" />
               Export CSV
+            </Button>
+            <Button variant="secondary" size="sm" onClick={handleExportPDF}>
+              <DocumentArrowDownIcon className="h-4 w-4 mr-1" />
+              Export PDF
             </Button>
           </div>
           <span className="text-sm text-gray-500">
             {selectedRows.length} transaction{selectedRows.length !== 1 ? 's' : ''} selected
           </span>
+        </div>
+      )}
+
+      {transactions.length > 0 && selectedRows.length === 0 && (
+        <div className="flex justify-end space-x-2 bg-gray-50 p-3 rounded-lg">
+          <Button variant="secondary" size="sm" onClick={handleExportCSV}>
+            <DocumentArrowDownIcon className="h-4 w-4 mr-1" />
+            Export All CSV ({totalRows})
+          </Button>
+          <Button variant="secondary" size="sm" onClick={handleExportPDF}>
+            <DocumentArrowDownIcon className="h-4 w-4 mr-1" />
+            Export All PDF ({totalRows})
+          </Button>
         </div>
       )}
 
